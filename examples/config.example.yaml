@@ -1,0 +1,129 @@
+# Secret-free mcpcloud configuration example.
+# Use provider-native shared profiles/workload identities outside this file.
+
+profiles:
+  aws-prod:
+    provider: aws
+    # This is a reference, not an access key or secret.
+    credential:
+      source: profile
+      profile: readonly
+    scopes:
+      accounts:
+        - "123456789012"
+    regions:
+      - ap-southeast-1
+    services:
+      - compute
+      - storage
+      - network
+      - iam
+
+  gcp-prod:
+    provider: gcp
+    credential:
+      source: default
+    scopes:
+      projects:
+        - example-project
+    options:
+      asset_scope: projects/example-project
+      # Project scope is required for GCP metrics; Monitoring/IAM calls are global.
+      # Existing standard Billing Export table; mcpcloud does not create it.
+      billing_table: billing-project.billing_export.gcp_billing_export_v1_example
+      billing_project: billing-project
+      billing_location: US
+    # GCP IAM/metrics and all cost connectors do not fan out by region; rows are filtered locally.
+    regions:
+      - asia-southeast1
+    services: [compute, storage, network, iam]
+
+  azure-prod:
+    provider: azure
+    credential:
+      source: workload
+    scopes:
+      subscriptions:
+        - 00000000-0000-0000-0000-000000000000
+    # Azure subscription metrics require an exact region (not `*`) and send it to Azure Monitor.
+    regions:
+      - southeastasia
+    services: [compute, storage, network, iam]
+
+  alibaba-prod:
+    provider: alibaba
+    credential:
+      source: env
+      env:
+        ALIBABA_CLOUD_ACCESS_KEY_ID: ALIBABA_CLOUD_ACCESS_KEY_ID
+        ALIBABA_CLOUD_ACCESS_KEY_SECRET: ALIBABA_CLOUD_ACCESS_KEY_SECRET
+    scopes:
+      # Secret-free numeric account placeholder; replace with the real account ID.
+      accounts: ["123456789012"]
+    regions: [cn-shanghai]
+    services: [compute, storage, network, iam]
+
+  huawei-prod:
+    provider: huawei
+    credential:
+      source: env
+      env:
+        HUAWEICLOUD_SDK_AK: HUAWEICLOUD_SDK_AK
+        HUAWEICLOUD_SDK_SK: HUAWEICLOUD_SDK_SK
+        HUAWEICLOUD_SDK_SECURITY_TOKEN: HUAWEICLOUD_SDK_SECURITY_TOKEN
+    scopes:
+      projects: [example-project]
+    options:
+      # Required for Huawei costs; explicitly choose china or intl (there is no default).
+      billing_site: china
+    regions: [ap-southeast-3]
+    services: [compute, storage, network, iam]
+
+  tencent-prod:
+    provider: tencent
+    credential:
+      source: env
+      env:
+        TENCENTCLOUD_SECRET_ID: TENCENTCLOUD_SECRET_ID
+        TENCENTCLOUD_SECRET_KEY: TENCENTCLOUD_SECRET_KEY
+        TENCENTCLOUD_TOKEN: TENCENTCLOUD_TOKEN
+    scopes:
+      # Secret-free numeric UIN placeholder; replace with the real account UIN.
+      accounts: ["100000000001"]
+    options:
+      # The API does not return currency; declare the account's billing currency.
+      billing_currency: CNY
+    regions: [ap-singapore]
+    services: [compute, storage, network, iam]
+
+  volcengine-prod:
+    provider: volcengine
+    credential:
+      source: env
+      env:
+        VOLCENGINE_ACCESS_KEY_ID: VOLCENGINE_ACCESS_KEY_ID
+        VOLCENGINE_SECRET_ACCESS_KEY: VOLCENGINE_SECRET_ACCESS_KEY
+        VOLCENGINE_SESSION_TOKEN: VOLCENGINE_SESSION_TOKEN
+    scopes:
+      # Secret-free numeric OwnerID placeholder; replace with the real OwnerID.
+      accounts: ["200000000001"]
+    regions: [ap-southeast-1]
+    services: [compute, storage, network, iam]
+
+# Keep limits conservative. The server's hard upper bounds cannot be raised by a query.
+limits:
+  max_targets: 128
+  max_provider_requests: 500
+  max_scanned_items: 50000
+  max_page_size: 100
+  default_timeout: 30s
+  max_timeout: 120s
+  cursor_ttl: 10m
+  concurrency: 8
+
+# Optional HTTP settings. Stdio is the safest default for local MCP clients.
+server:
+  listen: 127.0.0.1:8080
+  auth_token_env: MCPCLOUD_AUTH_TOKEN
+  allowed_origins:
+    - http://127.0.0.1:8080
