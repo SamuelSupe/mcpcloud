@@ -19,6 +19,8 @@ const (
 	StatusReady    = "ready"
 	StatusDegraded = "degraded"
 	StatusNotReady = "not_ready"
+	probePageSize  = 100
+	probeMaxPages  = 10
 )
 
 type CapabilityStatus struct {
@@ -139,20 +141,28 @@ func (r *Runner) probeProfile(ctx context.Context, probeID string, adapter provi
 	}
 	result.Operation = operation.Name
 	result.Region = probeRegion(adapter)
-	page, err := r.reader.NativeReadWithID(ctx, probeID, adapter.Profile(), provider.NativeRequest{Operation: operation.Name, Region: result.Region, Limit: 1})
-	if err != nil {
-		result.Error = safeError(err, operation.Name)
-		return result
+	request := provider.NativeRequest{Operation: operation.Name, Region: result.Region, Limit: probePageSize}
+	for pageNumber := 0; pageNumber < probeMaxPages; pageNumber++ {
+		page, err := r.reader.NativeReadWithID(ctx, probeID, adapter.Profile(), request)
+		if err != nil {
+			result.Error = safeError(err, operation.Name)
+			return result
+		}
+		result.Authenticated = true
+		result.ObservedScopes = mergeScopes(result.ObservedScopes, observedScopes(page.Rows))
+		result.ScopeVerified, _ = scopeEvidence(adapter, result.DeclaredScopes, result.ObservedScopes)
+		if result.ScopeVerified {
+			result.Status = StatusReady
+			result.IdentityStatus = "scope_verified"
+			return result
+		}
+		if page.NextToken == "" || page.NextToken == request.PageToken {
+			break
+		}
+		request.PageToken = page.NextToken
 	}
-	result.Authenticated = true
-	result.ObservedScopes = observedScopes(page.Rows)
 	var partialScopeEvidence bool
 	result.ScopeVerified, partialScopeEvidence = scopeEvidence(adapter, result.DeclaredScopes, result.ObservedScopes)
-	if result.ScopeVerified {
-		result.Status = StatusReady
-		result.IdentityStatus = "scope_verified"
-		return result
-	}
 	result.Status = StatusDegraded
 	if partialScopeEvidence {
 		result.IdentityStatus = "authenticated_partial_scope_evidence"
@@ -233,6 +243,20 @@ func observedScopes(rows []map[string]any) map[string][]string {
 		result[key] = unique(values, 64)
 	}
 	return compactScopes(result)
+}
+
+func mergeScopes(left, right map[string][]string) map[string][]string {
+	merged := map[string][]string{}
+	for key, values := range left {
+		merged[key] = append([]string(nil), values...)
+	}
+	for key, values := range right {
+		merged[key] = append(merged[key], values...)
+	}
+	for key, values := range merged {
+		merged[key] = unique(values, 64)
+	}
+	return compactScopes(merged)
 }
 
 func compactScopes(scopes map[string][]string) map[string][]string {
