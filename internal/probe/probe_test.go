@@ -93,12 +93,20 @@ type probeTestReader struct {
 		page provider.Page
 		err  error
 	}
+	sequences map[string][]struct {
+		page provider.Page
+		err  error
+	}
 }
 
 func (r *probeTestReader) NativeReadWithID(ctx context.Context, correlationID, profile string, request provider.NativeRequest) (provider.Page, error) {
 	r.mu.Lock()
 	r.calls = append(r.calls, probeNativeCall{correlationID: correlationID, profile: profile, request: request})
 	response := r.responses[profile]
+	if sequence := r.sequences[profile]; len(sequence) > 0 {
+		response = sequence[0]
+		r.sequences[profile] = sequence[1:]
+	}
 	r.mu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return provider.Page{}, err
@@ -135,6 +143,9 @@ func newProbeTestRunner(t *testing.T, adapters ...provider.Adapter) (*Runner, *p
 		t.Fatalf("NewRegistry() error = %v", err)
 	}
 	reader := &probeTestReader{responses: map[string]struct {
+		page provider.Page
+		err  error
+	}{}, sequences: map[string][]struct {
 		page provider.Page
 		err  error
 	}{}}
@@ -180,7 +191,7 @@ func TestRunnerUsesFixedInventoryNativeReadAndSafeSortedProfileSelection(t *test
 		t.Fatalf("NativeReadWithID calls = %#v, want one fixed inventory call per profile", calls)
 	}
 	for _, call := range calls {
-		if call.correlationID == "" || call.request.Operation == "" || call.request.Limit != 1 || call.request.Region != "" || len(call.request.Params) != 0 {
+		if call.correlationID == "" || call.request.Operation == "" || call.request.Limit != probePageSize || call.request.Region != "" || len(call.request.Params) != 0 || call.request.PageToken != "" {
 			t.Fatalf("probe call = %#v, want fixed operation/limit without arbitrary params", call)
 		}
 	}
@@ -199,6 +210,30 @@ func TestRunnerUsesFixedInventoryNativeReadAndSafeSortedProfileSelection(t *test
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("probe report contains forbidden provider detail %q: %s", forbidden, text)
 		}
+	}
+}
+
+func TestRunnerContinuesInventoryCursorWhenFirstPageHasNoMatchingScope(t *testing.T) {
+	adapter := newProbeTestAdapter("aws-prod", model.ProviderAWS, "account", "account-1")
+	runner, reader := newProbeTestRunner(t, adapter)
+	reader.sequences["aws-prod"] = []struct {
+		page provider.Page
+		err  error
+	}{
+		{page: provider.Page{NextToken: "next-page", Scanned: 1}},
+		{page: provider.Page{Rows: []map[string]any{{"scope": map[string]any{"account_id": "account-1"}}}, Scanned: 1}},
+	}
+
+	report, err := runner.Run(context.Background(), []string{"aws-prod"})
+	if err != nil || report.Status != StatusReady {
+		t.Fatalf("report = (%#v, %v), want ready after cursor continuation", report, err)
+	}
+	if len(reader.snapshotCalls()) != 2 {
+		t.Fatalf("NativeReadWithID calls = %#v, want two paginated calls", reader.snapshotCalls())
+	}
+	calls := reader.snapshotCalls()
+	if calls[0].request.Limit != probePageSize || calls[1].request.Limit != probePageSize || calls[1].request.PageToken != "next-page" {
+		t.Fatalf("paginated probe calls = %#v, want bounded page size and returned cursor", calls)
 	}
 }
 
