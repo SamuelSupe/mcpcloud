@@ -16,6 +16,11 @@ type nativeProductSpec struct {
 	description string
 }
 
+var nativeProductTypeOverrides = map[string]map[string]struct{}{
+	"volcengine.compute.list_instances": {"Volcengine::ECS::Instance": {}},
+	"volcengine.compute.list_disks":     {"Volcengine::StorageEBS::Volume": {}},
+}
+
 var nativeProductCatalog = []nativeProductSpec{
 	{suffix: "compute.list_instances", domain: "compute", kinds: []string{"instance"}, source: model.SourceResources, description: "compute instances"},
 	{suffix: "compute.list_disks", domain: "compute", kinds: []string{"disk"}, source: model.SourceResources, description: "block storage disks"},
@@ -73,12 +78,26 @@ func completeNativeProduct(page provider.Page, err error, spec nativeProductSpec
 	for _, row := range page.Rows {
 		domain, _ := row["domain"].(string)
 		kind, _ := row["kind"].(string)
-		if domain == spec.domain && stringIn(spec.kinds, kind) {
+		if domain == spec.domain && stringIn(spec.kinds, kind) && nativeProductTypeAllowed(row, operation) {
 			rows = append(rows, row)
 		}
 	}
 	page.Rows = rows
 	return page, nil
+}
+
+func nativeProductTypeAllowed(row map[string]any, operation string) bool {
+	allowed, ok := nativeProductTypeOverrides[operation]
+	if !ok {
+		return true
+	}
+	native, ok := row["native"].(map[string]any)
+	if !ok {
+		return false
+	}
+	nativeType, _ := native["resource_type"].(string)
+	_, ok = allowed[nativeType]
+	return ok
 }
 
 func attributeNativeProductError(err error, operation string) error {
