@@ -76,7 +76,7 @@ func (a *volcengineAdapter) queryMetrics(ctx context.Context, req provider.Query
 		Namespace: volc.String(selector.Parts[0]), SubNamespace: volc.String(selector.Parts[1]), MetricName: volc.String(selector.Parts[2]),
 		Instances: []*cloudmonitor.InstanceForGetMetricDataInput{{Dimensions: dimensions}},
 		StartTime: volc.Int32(int32(pageStart.Unix())), EndTime: volc.Int32(int32(pageEnd.Unix())),
-		Period: volc.String(fmt.Sprintf("%ds", int64(step.Seconds()))), StatisticsMethods: []*string{volc.String("Average")},
+		Period: volc.String(fmt.Sprintf("%ds", int64(step.Seconds()))), StatisticsMethods: []*string{volc.String("avg")},
 	}
 	output, err := cloudmonitor.New(sess).GetMetricDataWithContext(ctx, input)
 	if err != nil {
