@@ -1141,6 +1141,42 @@ func TestVolcengineNativeProductsRejectLookalikeIndexedResources(t *testing.T) {
 	if err != nil || len(page.Rows) != 1 || page.Rows[0]["native"].(map[string]any)["resource_type"] != "Volcengine::StorageEBS::Volume" {
 		t.Fatalf("Volcengine disk product rows = %#v, err=%v, want only EBS volumes", page.Rows, err)
 	}
+
+	bucketSpec, ok := nativeProductFor(model.ProviderVolcengine, "volcengine.storage.list_buckets")
+	if !ok {
+		t.Fatal("Volcengine bucket product is not registered")
+	}
+	bucketRows := []map[string]any{
+		{"domain": "storage", "kind": "bucket", "native": map[string]any{"resource_type": "Volcengine::TOS::Bucket"}},
+		{"domain": "storage", "kind": "bucket", "native": map[string]any{"resource_type": "Volcengine::AutoScaling::ScalingGroup"}},
+		{"domain": "storage", "kind": "bucket", "native": map[string]any{"resource_type": "snapshot"}},
+	}
+	page, err = completeNativeProduct(provider.Page{Rows: bucketRows}, nil, bucketSpec, "volcengine.storage.list_buckets")
+	if err != nil || len(page.Rows) != 1 || page.Rows[0]["native"].(map[string]any)["resource_type"] != "Volcengine::TOS::Bucket" {
+		t.Fatalf("Volcengine bucket product rows = %#v, err=%v, want only TOS buckets", page.Rows, err)
+	}
+
+	iamSpec, ok := nativeProductFor(model.ProviderVolcengine, "volcengine.iam.list_resources")
+	if !ok {
+		t.Fatal("Volcengine IAM product is not registered")
+	}
+	iamRows := []map[string]any{
+		{"domain": "iam", "kind": "user", "native": map[string]any{"resource_type": "Volcengine::IAM::User"}},
+		{"domain": "iam", "kind": "role", "native": map[string]any{"resource_type": "Volcengine::IAM::Role"}},
+		{"domain": "iam", "kind": "policy", "native": map[string]any{"resource_type": "Volcengine::IAM::Policy"}},
+		{"domain": "iam", "kind": "role", "native": map[string]any{"resource_type": "Volcengine::IAM::Group"}},
+		{"domain": "iam", "kind": "policy", "native": map[string]any{"resource_type": "Volcengine::StorageEBS::SnapshotPolicy"}},
+	}
+	page, err = completeNativeProduct(provider.Page{Rows: iamRows}, nil, iamSpec, "volcengine.iam.list_resources")
+	if err != nil || len(page.Rows) != 4 {
+		t.Fatalf("Volcengine IAM product rows = %#v, err=%v, want only IAM resource types", page.Rows, err)
+	}
+	for _, row := range page.Rows {
+		typeName := row["native"].(map[string]any)["resource_type"]
+		if !strings.HasPrefix(typeName.(string), "Volcengine::IAM::") {
+			t.Fatalf("Volcengine IAM product row = %#v, contains non-IAM resource type", row)
+		}
+	}
 }
 
 func TestNativeProductErrorsAreAttributedToProductOperation(t *testing.T) {

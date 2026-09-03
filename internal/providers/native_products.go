@@ -19,6 +19,13 @@ type nativeProductSpec struct {
 var nativeProductTypeOverrides = map[string]map[string]struct{}{
 	"volcengine.compute.list_instances": {"Volcengine::ECS::Instance": {}},
 	"volcengine.compute.list_disks":     {"Volcengine::StorageEBS::Volume": {}},
+	"volcengine.storage.list_buckets":   {"Volcengine::TOS::Bucket": {}},
+	"volcengine.iam.list_resources": {
+		"Volcengine::IAM::Group":  {},
+		"Volcengine::IAM::Policy": {},
+		"Volcengine::IAM::Role":   {},
+		"Volcengine::IAM::User":   {},
+	},
 }
 
 var nativeProductCatalog = []nativeProductSpec{
