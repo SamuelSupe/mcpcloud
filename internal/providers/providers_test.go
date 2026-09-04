@@ -193,6 +193,18 @@ func TestCommonResourceNormalizationKeepsStableFieldsAndClassifiesKinds(t *testi
 	}
 }
 
+func TestCommonResourceNormalizationClassifiesBlockStorageBeforeGenericStorage(t *testing.T) {
+	volume := baseRow(model.ProviderVolcengine, "volcengine-prod", "vol-1", "data", "storageebs", "Volcengine::StorageEBS::Volume", "cn-shanghai", "2118159236", stableObservedTime)
+	if volume["domain"] != "compute" || volume["kind"] != "disk" {
+		t.Fatalf("EBS volume classification = (%v, %v), want (compute, disk)", volume["domain"], volume["kind"])
+	}
+
+	bucket := baseRow(model.ProviderVolcengine, "volcengine-prod", "bucket-1", "objects", "tos", "Volcengine::TOS::Bucket", "cn-shanghai", "2118159236", stableObservedTime)
+	if bucket["domain"] != "storage" || bucket["kind"] != "bucket" {
+		t.Fatalf("TOS bucket classification = (%v, %v), want (storage, bucket)", bucket["domain"], bucket["kind"])
+	}
+}
+
 func TestSevenCloudCapabilityStatusesReflectBillingConfiguration(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -1099,6 +1111,71 @@ func TestNativeProductRowsFilterTargetKindsAndPreservePageStats(t *testing.T) {
 				t.Fatalf("page stats = %#v, want cursor and scan/request accounting preserved", page)
 			}
 		})
+	}
+}
+
+func TestVolcengineNativeProductsRejectLookalikeIndexedResources(t *testing.T) {
+	instanceSpec, ok := nativeProductFor(model.ProviderVolcengine, "volcengine.compute.list_instances")
+	if !ok {
+		t.Fatal("Volcengine instance product is not registered")
+	}
+	instanceRows := []map[string]any{
+		{"domain": "compute", "kind": "instance", "native": map[string]any{"resource_type": "Volcengine::ECS::Instance"}},
+		{"domain": "compute", "kind": "instance", "native": map[string]any{"resource_type": "Volcengine::ECS::Invocation"}},
+		{"domain": "compute", "kind": "instance", "native": map[string]any{"resource_type": "Volcengine::FileNAS::Instance"}},
+	}
+	page, err := completeNativeProduct(provider.Page{Rows: instanceRows}, nil, instanceSpec, "volcengine.compute.list_instances")
+	if err != nil || len(page.Rows) != 1 || page.Rows[0]["native"].(map[string]any)["resource_type"] != "Volcengine::ECS::Instance" {
+		t.Fatalf("Volcengine instance product rows = %#v, err=%v, want only ECS instances", page.Rows, err)
+	}
+
+	diskSpec, ok := nativeProductFor(model.ProviderVolcengine, "volcengine.compute.list_disks")
+	if !ok {
+		t.Fatal("Volcengine disk product is not registered")
+	}
+	diskRows := []map[string]any{
+		{"domain": "compute", "kind": "disk", "native": map[string]any{"resource_type": "Volcengine::StorageEBS::Volume"}},
+		{"domain": "compute", "kind": "disk", "native": map[string]any{"resource_type": "snapshot"}},
+	}
+	page, err = completeNativeProduct(provider.Page{Rows: diskRows}, nil, diskSpec, "volcengine.compute.list_disks")
+	if err != nil || len(page.Rows) != 1 || page.Rows[0]["native"].(map[string]any)["resource_type"] != "Volcengine::StorageEBS::Volume" {
+		t.Fatalf("Volcengine disk product rows = %#v, err=%v, want only EBS volumes", page.Rows, err)
+	}
+
+	bucketSpec, ok := nativeProductFor(model.ProviderVolcengine, "volcengine.storage.list_buckets")
+	if !ok {
+		t.Fatal("Volcengine bucket product is not registered")
+	}
+	bucketRows := []map[string]any{
+		{"domain": "storage", "kind": "bucket", "native": map[string]any{"resource_type": "Volcengine::TOS::Bucket"}},
+		{"domain": "storage", "kind": "bucket", "native": map[string]any{"resource_type": "Volcengine::AutoScaling::ScalingGroup"}},
+		{"domain": "storage", "kind": "bucket", "native": map[string]any{"resource_type": "snapshot"}},
+	}
+	page, err = completeNativeProduct(provider.Page{Rows: bucketRows}, nil, bucketSpec, "volcengine.storage.list_buckets")
+	if err != nil || len(page.Rows) != 1 || page.Rows[0]["native"].(map[string]any)["resource_type"] != "Volcengine::TOS::Bucket" {
+		t.Fatalf("Volcengine bucket product rows = %#v, err=%v, want only TOS buckets", page.Rows, err)
+	}
+
+	iamSpec, ok := nativeProductFor(model.ProviderVolcengine, "volcengine.iam.list_resources")
+	if !ok {
+		t.Fatal("Volcengine IAM product is not registered")
+	}
+	iamRows := []map[string]any{
+		{"domain": "iam", "kind": "user", "native": map[string]any{"resource_type": "Volcengine::IAM::User"}},
+		{"domain": "iam", "kind": "role", "native": map[string]any{"resource_type": "Volcengine::IAM::Role"}},
+		{"domain": "iam", "kind": "policy", "native": map[string]any{"resource_type": "Volcengine::IAM::Policy"}},
+		{"domain": "iam", "kind": "role", "native": map[string]any{"resource_type": "Volcengine::IAM::Group"}},
+		{"domain": "iam", "kind": "policy", "native": map[string]any{"resource_type": "Volcengine::StorageEBS::SnapshotPolicy"}},
+	}
+	page, err = completeNativeProduct(provider.Page{Rows: iamRows}, nil, iamSpec, "volcengine.iam.list_resources")
+	if err != nil || len(page.Rows) != 4 {
+		t.Fatalf("Volcengine IAM product rows = %#v, err=%v, want only IAM resource types", page.Rows, err)
+	}
+	for _, row := range page.Rows {
+		typeName := row["native"].(map[string]any)["resource_type"]
+		if !strings.HasPrefix(typeName.(string), "Volcengine::IAM::") {
+			t.Fatalf("Volcengine IAM product row = %#v, contains non-IAM resource type", row)
+		}
 	}
 }
 

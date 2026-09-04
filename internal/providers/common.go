@@ -228,6 +228,8 @@ func baseRow(p model.Provider, profile, id, name, service, nativeType, region, a
 
 func classify(service, nativeType string) (string, string) {
 	v := strings.ToLower(service + " " + nativeType)
+	native := strings.ToLower(nativeType)
+	serviceName := strings.ToLower(service)
 	switch {
 	case containsAny(v, "iam", "ram", "cam", "role", "policy", "serviceaccount", "service_account"):
 		if strings.Contains(v, "policy") {
@@ -249,6 +251,8 @@ func classify(service, nativeType string) (string, string) {
 		return "database", "database"
 	case containsAny(v, "redis", "elasticache", "memorystore", "dcs", "microsoft.cache"):
 		return "database", "cache"
+	case containsAny(native, "disk", "volume", "ebs", "evs", "cbs") || containsAny(serviceName, "disk", "volume", "evs", "cbs"):
+		return "compute", "disk"
 	case containsAny(v, "s3", "storage", "bucket", "oss", "obs", "cos", "tos"):
 		return "storage", "bucket"
 	case containsAny(v, "vpc", "network", "subnet", "securitygroup", "security_group", "firewall", "eip", "publicip", "public_ip", "loadbalancer", "load_balancer", "elb", "clb", "slb"):
@@ -277,8 +281,6 @@ func classify(service, nativeType string) (string, string) {
 		default:
 			return "logging", "log_group"
 		}
-	case containsAny(v, "disk", "volume", "ebs", "evs", "cbs"):
-		return "compute", "disk"
 	case containsAny(v, "ec2", "compute", "instance", "ecs", "cvm", "virtualmachine", "virtual_machine"):
 		return "compute", "instance"
 	default:
