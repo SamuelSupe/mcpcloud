@@ -205,6 +205,33 @@ func TestCommonResourceNormalizationClassifiesBlockStorageBeforeGenericStorage(t
 	}
 }
 
+func TestVolcengineResourceNormalizationRejectsLookalikeTypes(t *testing.T) {
+	tests := []struct {
+		name       string
+		service    string
+		nativeType string
+		domain     string
+		kind       string
+	}{
+		{name: "ecs instance", service: "ecs", nativeType: "Volcengine::ECS::Instance", domain: "compute", kind: "instance"},
+		{name: "ecs invocation", service: "ecs", nativeType: "Volcengine::ECS::Invocation", domain: "other", kind: "resource"},
+		{name: "file nas instance", service: "FileNAS", nativeType: "Volcengine::FileNAS::Instance", domain: "other", kind: "resource"},
+		{name: "ebs volume", service: "storage_ebs", nativeType: "Volcengine::StorageEBS::Volume", domain: "compute", kind: "disk"},
+		{name: "ebs snapshot policy", service: "storage_ebs", nativeType: "Volcengine::StorageEBS::SnapshotPolicy", domain: "other", kind: "resource"},
+		{name: "short ebs snapshot", service: "storage_ebs", nativeType: "snapshot", domain: "other", kind: "resource"},
+		{name: "tos bucket", service: "tos", nativeType: "Volcengine::TOS::Bucket", domain: "storage", kind: "bucket"},
+		{name: "autoscaling hook", service: "auto_scaling", nativeType: "Volcengine::AutoScaling::ScalingLifecycleHook", domain: "other", kind: "resource"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			row := baseRow(model.ProviderVolcengine, "volcengine-prod", "id", "name", tt.service, tt.nativeType, "cn-shanghai", "2118159236", stableObservedTime)
+			if row["domain"] != tt.domain || row["kind"] != tt.kind {
+				t.Fatalf("classification = (%v, %v), want (%s, %s)", row["domain"], row["kind"], tt.domain, tt.kind)
+			}
+		})
+	}
+}
+
 func TestSevenCloudCapabilityStatusesReflectBillingConfiguration(t *testing.T) {
 	tests := []struct {
 		name    string
