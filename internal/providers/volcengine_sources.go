@@ -145,7 +145,7 @@ func (a *volcengineAdapter) queryCosts(ctx context.Context, req provider.QueryRe
 		return provider.Page{}, err
 	}
 	limit32, offset32, needTotal, ignoreZero := int32(limit), int32(cursor.Offset), int32(1), int32(1)
-	input := &billing.ListBillDetailInput{BillPeriod: volc.String(month.Format("2006-01")), Limit: &limit32, Offset: &offset32, NeedRecordNum: &needTotal, IgnoreZero: &ignoreZero}
+	input := &billing.ListBillDetailInput{BillPeriod: volc.String(month.Format("2006-01")), GroupPeriod: volc.Int32(1), Limit: &limit32, Offset: &offset32, NeedRecordNum: &needTotal, IgnoreZero: &ignoreZero}
 	if len(req.Accounts) == 1 {
 		account, err := strconv.ParseInt(scopeTail(req.Accounts[0]), 10, 64)
 		if err != nil {
@@ -162,7 +162,10 @@ func (a *volcengineAdapter) queryCosts(ctx context.Context, req provider.QueryRe
 		if item == nil {
 			continue
 		}
-		date, parsed := volcengineBillDate(deref(item.ExpenseDate), deref(item.ExpenseBeginTime), month)
+		date, parsed, err := volcengineBillDate(deref(item.ExpenseDate), deref(item.ExpenseBeginTime))
+		if err != nil {
+			return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: volcengineCostsOperation, Message: err.Error()}
+		}
 		if parsed.Before(start) || !parsed.Before(end) {
 			continue
 		}
@@ -175,10 +178,7 @@ func (a *volcengineAdapter) queryCosts(ctx context.Context, req provider.QueryRe
 			service = deref(item.ProductZh)
 		}
 		account := deref(item.OwnerID)
-		regionValue := deref(item.RegionCode)
-		if regionValue == "" {
-			regionValue = deref(item.Region)
-		}
+		regionValue := volcengineBillRegion(deref(item.RegionCode), deref(item.Region))
 		id := deref(item.BillDetailId)
 		if id == "" {
 			id = strings.Join([]string{date, account, service, deref(item.InstanceNo)}, ":")
@@ -198,15 +198,31 @@ func (a *volcengineAdapter) queryCosts(ctx context.Context, req provider.QueryRe
 	return provider.Page{Rows: rows, NextToken: next, Scanned: len(output.List), Requests: 1}, nil
 }
 
-func volcengineBillDate(expenseDate, begin string, month time.Time) (string, time.Time) {
+func volcengineBillDate(expenseDate, begin string) (string, time.Time, error) {
 	for _, value := range []string{expenseDate, begin} {
-		for _, layout := range []string{"2006-01-02", "2006-01-02 15:04:05", time.RFC3339} {
+		for _, layout := range []string{"2006-01-02", "2006-01-02 15:04:05", "2006/1/2", "2006/1/2 15:04:05", time.RFC3339} {
 			if parsed, err := time.Parse(layout, value); err == nil {
-				return parsed.UTC().Format("2006-01-02"), parsed.UTC()
+				return parsed.UTC().Format("2006-01-02"), parsed.UTC(), nil
 			}
 		}
 	}
-	return month.Format("2006-01-02"), month
+	return "", time.Time{}, fmt.Errorf("Volcengine daily bill has no valid expense date")
+}
+
+func volcengineBillRegion(code, name string) string {
+	// Billing uses internal region codes rather than Resource Center region IDs.
+	// Only translate aliases confirmed by live billing Region/RegionCode pairs;
+	// retain unknown codes so the profile allowlist continues to fail closed.
+	switch code {
+	case "R000305":
+		return "cn-beijing"
+	case "R000310":
+		return "cn-shanghai"
+	}
+	if code != "" {
+		return code
+	}
+	return name
 }
 
 func volcengineSourceError(operation string, err error) error {
