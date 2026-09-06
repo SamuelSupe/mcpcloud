@@ -102,6 +102,8 @@ Use this only when a normalized DSL field is insufficient and `cloud_schema` lis
 
 The operation name and parameter shape are selected from the registry. Arbitrary URLs, HTTP methods, API action names, SDK method names, provider-native query strings, and write operations are rejected before a provider call. The 63 product-level operation names and their exact `params` schemas are:
 
+Volcengine inventory operations apply an exact top-level `region` as a Resource Center filter. The legacy `params.region` filter remains supported; when both specify different exact regions, the request is rejected before any provider call. Continue pagination with the same region and parameters.
+
 | Provider | Product-level operation names | `params` schema for each listed operation |
 | --- | --- | --- |
 | AWS | `aws.compute.list_instances`, `aws.compute.list_disks`, `aws.storage.list_buckets`, `aws.network.list_resources`, `aws.iam.list_resources`, `aws.database.list_resources`, `aws.kubernetes.list_resources`, `aws.monitoring.list_alarms`, `aws.logging.list_resources` | No parameters. `region` is the top-level native-read region. |
