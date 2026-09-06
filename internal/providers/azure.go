@@ -29,6 +29,8 @@ type azureAdapter struct {
 	profile config.Profile
 }
 
+var newAzureClientSecretCredential = azidentity.NewClientSecretCredential
+
 func init() {
 	provider.RegisterFactory(model.ProviderAzure, func(name string, p config.Profile) (provider.Adapter, error) {
 		return &azureAdapter{name: name, profile: p}, nil
@@ -180,7 +182,7 @@ func (a *azureAdapter) credential() (*azidentity.DefaultAzureCredential, *aziden
 		if tenant == "" || clientID == "" || secret == "" {
 			return nil, nil, &provider.Error{Code: "missing_credentials", Operation: azureResourcesOperation, Message: "Azure credential environment variables are not set"}
 		}
-		cred, err := azidentity.NewClientSecretCredential(tenant, clientID, secret, nil)
+		cred, err := newAzureClientSecretCredential(tenant, clientID, secret, nil)
 		return nil, cred, err
 	}
 	cred, err := azidentity.NewDefaultAzureCredential(nil)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -1481,11 +1480,7 @@ func TestGCPDeepDetailsUseFixedRESTPathsAndProjectScope(t *testing.T) {
 func TestAzureDeepDetailsUseFixedManagementPathsAndSubscriptionScope(t *testing.T) {
 	authority := httptest.NewTLSServer(nil)
 	t.Cleanup(authority.Close)
-	certFile := t.TempDir() + "/authority.pem"
-	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: authority.Certificate().Raw}), 0o600); err != nil {
-		t.Fatalf("WriteFile(authority certificate) error = %v", err)
-	}
-	t.Setenv("SSL_CERT_FILE", certFile)
+	useAzureTestAuthority(t, authority)
 	t.Setenv("AZURE_AUTHORITY_HOST", authority.URL)
 	t.Setenv("MCP_TEST_AZURE_DEEP_TENANT", "adfs")
 	t.Setenv("MCP_TEST_AZURE_DEEP_CLIENT", "client")
@@ -1930,11 +1925,7 @@ func TestGCPInstanceDetailUsesFixedEndpointAndProjectAllowlist(t *testing.T) {
 func TestAzureInstanceDetailUsesFixedManagementEndpointAndSubscriptionAllowlist(t *testing.T) {
 	authority := httptest.NewTLSServer(nil)
 	t.Cleanup(authority.Close)
-	certFile := t.TempDir() + "/authority.pem"
-	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: authority.Certificate().Raw}), 0o600); err != nil {
-		t.Fatalf("WriteFile(authority certificate) error = %v", err)
-	}
-	t.Setenv("SSL_CERT_FILE", certFile)
+	useAzureTestAuthority(t, authority)
 	t.Setenv("AZURE_AUTHORITY_HOST", authority.URL)
 	t.Setenv("MCP_TEST_AZURE_TENANT", "adfs")
 	t.Setenv("MCP_TEST_AZURE_CLIENT", "client")
@@ -2129,11 +2120,7 @@ func TestGCPIAMProductUsesIAMCloudAssetEndpoint(t *testing.T) {
 func TestAzureIAMProductUsesAuthorizationResourcesQuery(t *testing.T) {
 	authority := httptest.NewTLSServer(nil)
 	t.Cleanup(authority.Close)
-	certFile := t.TempDir() + "/authority.pem"
-	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: authority.Certificate().Raw}), 0o600); err != nil {
-		t.Fatalf("WriteFile(authority certificate) error = %v", err)
-	}
-	t.Setenv("SSL_CERT_FILE", certFile)
+	useAzureTestAuthority(t, authority)
 	t.Setenv("AZURE_AUTHORITY_HOST", authority.URL)
 	authority.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if strings.HasSuffix(request.URL.Path, ".well-known/openid-configuration") {
