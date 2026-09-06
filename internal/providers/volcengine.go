@@ -106,6 +106,15 @@ func (a *volcengineAdapter) NativeRead(ctx context.Context, req provider.NativeR
 			filters[key] = []string{value}
 		}
 	}
+	// Resource Center is global: the endpoint region does not filter inventory.
+	// Honor the native request's region just as Query does, retaining the legacy
+	// params.region filter only when it agrees or no exact top-level region exists.
+	if req.Region != "" && req.Region != "*" {
+		if regions := filters["Region"]; len(regions) > 0 && regions[0] != req.Region {
+			return provider.Page{}, &provider.Error{Code: "invalid_parameter", Operation: req.Operation, Message: "params.region conflicts with top-level region"}
+		}
+		filters["Region"] = []string{req.Region}
+	}
 	return a.search(ctx, filters, req.PageToken, req.Limit)
 }
 
