@@ -44,14 +44,23 @@ func classifyVolcengine(service, nativeType string) (string, string) {
 			return "iam", "user"
 		}
 	case strings.HasPrefix(typeName, "volcengine::rds::"), strings.HasPrefix(typeName, "volcengine::rdsmysql::"):
-		return "database", "database"
+		if strings.HasSuffix(typeName, "::instance") {
+			return "database", "database"
+		}
+		return "other", "resource"
 	case strings.HasPrefix(typeName, "volcengine::redis::"), strings.HasPrefix(typeName, "volcengine::dcs::"):
-		return "database", "cache"
+		if strings.HasSuffix(typeName, "::instance") {
+			return "database", "cache"
+		}
+		return "other", "resource"
 	case strings.HasPrefix(typeName, "volcengine::vke::"), strings.HasPrefix(typeName, "volcengine::kubernetes::"):
-		if strings.Contains(typeName, "nodepool") || strings.Contains(typeName, "node_pool") {
+		if strings.HasSuffix(typeName, "::nodepool") || strings.HasSuffix(typeName, "::node_pool") {
 			return "kubernetes", "node_pool"
 		}
-		return "kubernetes", "cluster"
+		if strings.HasSuffix(typeName, "::cluster") {
+			return "kubernetes", "cluster"
+		}
+		return "other", "resource"
 	case strings.HasPrefix(typeName, "volcengine::cloudmonitor::"), strings.HasPrefix(typeName, "volcengine::monitoring::"):
 		return "monitoring", "alarm"
 	case strings.HasPrefix(typeName, "volcengine::tls::"), strings.HasPrefix(typeName, "volcengine::logging::"):
