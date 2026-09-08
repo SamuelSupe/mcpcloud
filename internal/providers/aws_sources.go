@@ -182,7 +182,7 @@ func awsSourceError(operation string, err error) error {
 }
 
 func firstDimension(dimensions map[string]string) string {
-	for _, name := range []string{"InstanceId", "instance_id", "resource_id", "ResourceId"} {
+	for _, name := range []string{"InstanceId", "instance_id", "resource_id", "ResourceId", "ResourceID"} {
 		if value := dimensions[name]; value != "" {
 			return value
 		}

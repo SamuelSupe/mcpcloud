@@ -30,6 +30,8 @@ import (
 	tchttp "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/http"
 	volcecs "github.com/volcengine/volcengine-go-sdk/service/ecs"
 	volcrds "github.com/volcengine/volcengine-go-sdk/service/rdsmysqlv2"
+	volcredis "github.com/volcengine/volcengine-go-sdk/service/redis"
+	volcresourcecenter "github.com/volcengine/volcengine-go-sdk/service/resourcecenter"
 	volcvke "github.com/volcengine/volcengine-go-sdk/service/vke"
 	volc "github.com/volcengine/volcengine-go-sdk/volcengine"
 	volcrequest "github.com/volcengine/volcengine-go-sdk/volcengine/request"
@@ -1280,12 +1282,16 @@ func TestInstanceDetailCatalogRegistersSevenOperationsAndResourceCapabilities(t 
 	}
 }
 
-func TestDeepDetailCatalogRegistersFourteenClosedOperationsAndCapabilities(t *testing.T) {
+func TestDeepDetailCatalogRegistersClosedOperationsAndCapabilities(t *testing.T) {
 	seen := map[string]bool{}
 	for _, adapter := range nativeProductTestAdapters() {
 		specs := deepDetailCatalog[adapter.Provider()]
-		if len(specs) != 2 {
-			t.Fatalf("%s deep detail catalog entries = %d, want two database/kubernetes operations", adapter.Provider(), len(specs))
+		want := 2
+		if adapter.Provider() == model.ProviderVolcengine {
+			want = 3
+		}
+		if len(specs) != want {
+			t.Fatalf("%s deep detail catalog entries = %d, want %d", adapter.Provider(), len(specs), want)
 		}
 		capability := capabilityForSource(adapter.Capabilities(), model.SourceResources)
 		for _, spec := range specs {
@@ -1327,8 +1333,9 @@ func TestDeepDetailCatalogRegistersFourteenClosedOperationsAndCapabilities(t *te
 			}
 		}
 	}
-	if len(seen) != len(model.Providers)*2 {
-		t.Fatalf("deep detail operation count = %d, want %d", len(seen), len(model.Providers)*2)
+	want := len(model.Providers)*2 + 1
+	if len(seen) != want {
+		t.Fatalf("deep detail operation count = %d, want %d", len(seen), want)
 	}
 }
 
@@ -1582,11 +1589,17 @@ func TestVolcengineDeepDetailsUseFixedSDKInputsAndAccountRegion(t *testing.T) {
 	t.Setenv("MCP_TEST_VOLC_DEEP_ACCESS", "access")
 	t.Setenv("MCP_TEST_VOLC_DEEP_SECRET", "secret")
 	var rdsInput *volcrds.DescribeDBInstanceDetailInput
+	var redisInput *volcredis.DescribeDBInstanceDetailInput
 	var vkeInput *volcvke.ListClustersInput
-	previousRDS, previousVKE := newVolcengineRDSDetailClient, newVolcengineVKEDetailClient
-	t.Cleanup(func() { newVolcengineRDSDetailClient, newVolcengineVKEDetailClient = previousRDS, previousVKE })
+	previousRDS, previousRedis, previousVKE := newVolcengineRDSDetailClient, newVolcengineRedisDetailClient, newVolcengineVKEDetailClient
+	t.Cleanup(func() {
+		newVolcengineRDSDetailClient, newVolcengineRedisDetailClient, newVolcengineVKEDetailClient = previousRDS, previousRedis, previousVKE
+	})
 	newVolcengineRDSDetailClient = func(_ *volcsession.Session) volcengineRDSDetailAPI {
 		return volcengineRDSDeepStub{capture: &rdsInput, err: fmt.Errorf("stub RDS")}
+	}
+	newVolcengineRedisDetailClient = func(_ *volcsession.Session) volcengineRedisDetailAPI {
+		return volcengineRedisDeepStub{capture: &redisInput, err: fmt.Errorf("stub Redis")}
 	}
 	newVolcengineVKEDetailClient = func(_ *volcsession.Session) volcengineVKEDetailAPI {
 		return volcengineVKEDetailDeepStub{capture: &vkeInput, err: fmt.Errorf("stub VKE")}
@@ -1603,6 +1616,7 @@ func TestVolcengineDeepDetailsUseFixedSDKInputsAndAccountRegion(t *testing.T) {
 		params    map[string]any
 	}{
 		{operation: "volcengine.rdsmysql.describe_db_instance_detail", params: map[string]any{"instance_id": "db-1"}},
+		{operation: "volcengine.redis.describe_db_instance_detail", params: map[string]any{"instance_id": "redis-1"}},
 		{operation: "volcengine.vke.list_clusters", params: map[string]any{"cluster_id": "cluster-a"}},
 	} {
 		_, err := adapter.NativeRead(context.Background(), provider.NativeRequest{Operation: tt.operation, Region: "cn-beijing", Params: tt.params})
@@ -1610,6 +1624,9 @@ func TestVolcengineDeepDetailsUseFixedSDKInputsAndAccountRegion(t *testing.T) {
 	}
 	if rdsInput == nil || volc.StringValue(rdsInput.InstanceId) != "db-1" {
 		t.Fatalf("Volcengine RDS input = %#v, want only InstanceId=db-1", rdsInput)
+	}
+	if redisInput == nil || volc.StringValue(redisInput.InstanceId) != "redis-1" {
+		t.Fatalf("Volcengine Redis input = %#v, want only InstanceId=redis-1", redisInput)
 	}
 	if vkeInput == nil || vkeInput.Filter == nil || len(vkeInput.Filter.Ids) != 1 || volc.StringValue(vkeInput.Filter.Ids[0]) != "cluster-a" || volc.Int32Value(vkeInput.PageNumber) != 1 || volc.Int32Value(vkeInput.PageSize) != 1 {
 		t.Fatalf("Volcengine VKE input = %#v, want one ID and page 1/1", vkeInput)
@@ -2077,6 +2094,55 @@ func TestVolcengineInstanceDetailUsesFixedDescribeInstancesRequest(t *testing.T)
 	}
 }
 
+func TestVolcengineConsoleEvidenceNormalization(t *testing.T) {
+	adapter := &volcengineAdapter{name: "volcengine-prod"}
+	rdsRow := adapter.volcengineRDSDetailRow(&volcrds.DescribeDBInstanceDetailOutput{
+		BasicInfo: &volcrds.BasicInfoForDescribeDBInstanceDetailOutput{
+			InstanceId: volc.String("mysql-1"), InstanceName: volc.String("mysql-prod"), RegionId: volc.String("cn-shanghai"),
+			Memory: volc.Int32(4), AutoUpgradeMinorVersion: volc.String("Auto"), DeletionProtection: volc.String("Enabled"),
+		},
+	}, "cn-beijing", "2000000001")
+	rdsAttributes := rdsRow["attributes"].(map[string]any)
+	if rdsAttributes["memory_mb"] != 4096 {
+		t.Fatalf("Volcengine RDS memory_mb = %#v, want 4096 for provider value 4 GiB", rdsAttributes["memory_mb"])
+	}
+	rdsPosture := rdsAttributes["posture"].(map[string]any)
+	if rdsPosture["automatic_minor_version_upgrade"] != true || rdsPosture["deletion_protection"] != true {
+		t.Fatalf("Volcengine RDS posture = %#v, want console Auto/Enabled normalized true", rdsPosture)
+	}
+
+	redisRow := adapter.volcengineRedisDetailRow(&volcredis.DescribeDBInstanceDetailOutput{
+		InstanceId: volc.String("redis-1"), InstanceName: volc.String("redis-prod"), RegionId: volc.String("cn-shanghai"), Status: volc.String("Running"),
+		EngineVersion: volc.String("5.0"), InstanceClass: volc.String("PrimarySecondary"), ProjectName: volc.String("default"),
+		Capacity:        &volcredis.CapacityForDescribeDBInstanceDetailOutput{Total: volc.Int64(1024), Used: volc.Int64(179)},
+		ShardCapacityV2: volc.Int64(512), ShardNumber: volc.Int32(2), NodeNumber: volc.Int32(2), MaxConnections: volc.Int32(10000),
+		MultiAZ: volc.String("disabled"), DeletionProtection: volc.String("enabled"), AutoRenew: volc.Bool(true), ShardedCluster: volc.Int32(1),
+		VpcAuthMode: volc.String("close"), ZoneIds: []*string{volc.String("cn-shanghai-b")},
+		VisitAddrs: []*volcredis.VisitAddrForDescribeDBInstanceDetailOutput{{Address: volc.String("must-not-leak.redis.volces.com")}},
+	}, "cn-beijing", "2000000001")
+	if redisRow["state"] != "running" || redisRow["kind"] != "cache" {
+		t.Fatalf("Volcengine Redis identity = %#v, want running cache", redisRow)
+	}
+	redisAttributes := redisRow["attributes"].(map[string]any)
+	if redisAttributes["memory_mb"] != int64(1024) || redisAttributes["memory_used_mb"] != int64(179) || redisAttributes["shard_memory_mb"] != int64(512) {
+		t.Fatalf("Volcengine Redis memory attributes = %#v, want documented MiB values", redisAttributes)
+	}
+	redisPosture := redisAttributes["posture"].(map[string]any)
+	if redisPosture["deletion_protection"] != true || redisPosture["automatic_renewal_enabled"] != true || redisPosture["multi_zone"] != false || redisPosture["sharded_cluster_enabled"] != true || redisPosture["password_free_access_enabled"] != false {
+		t.Fatalf("Volcengine Redis posture = %#v, want normalized provider flags", redisPosture)
+	}
+	assertDeepDetailRowSafe(t, redisRow, "volcengine-redis", "account_id", "2000000001")
+
+	tosType := "Volcengine::TOS::Bucket"
+	tosRow := adapter.row(&volcresourcecenter.ResourceForSearchResourcesOutput{ResourceID: volc.String("sh-sit-tos-scopedb"), ResourceType: &tosType}, stableObservedTime)
+	if tosRow["name"] != "sh-sit-tos-scopedb" {
+		t.Fatalf("Volcengine TOS name = %#v, want ResourceID fallback", tosRow["name"])
+	}
+	if got := firstDimension(map[string]string{"ResourceID": "i-yee5a5aq68vr6on043hw"}); got != "i-yee5a5aq68vr6on043hw" {
+		t.Fatalf("firstDimension(ResourceID) = %q, want ECS instance ID", got)
+	}
+}
+
 func TestGCPIAMProductUsesIAMCloudAssetEndpoint(t *testing.T) {
 	credentialsPath := t.TempDir() + "/gcp-credentials.json"
 	credentials := `{"type":"authorized_user","client_id":"test-client","client_secret":"test-secret","refresh_token":"test-refresh"}`
@@ -2466,6 +2532,16 @@ type volcengineRDSDeepStub struct {
 }
 
 func (s volcengineRDSDeepStub) DescribeDBInstanceDetailWithContext(_ volc.Context, input *volcrds.DescribeDBInstanceDetailInput, _ ...volcrequest.Option) (*volcrds.DescribeDBInstanceDetailOutput, error) {
+	*s.capture = input
+	return nil, s.err
+}
+
+type volcengineRedisDeepStub struct {
+	capture **volcredis.DescribeDBInstanceDetailInput
+	err     error
+}
+
+func (s volcengineRedisDeepStub) DescribeDBInstanceDetailWithContext(_ volc.Context, input *volcredis.DescribeDBInstanceDetailInput, _ ...volcrequest.Option) (*volcredis.DescribeDBInstanceDetailOutput, error) {
 	*s.capture = input
 	return nil, s.err
 }
