@@ -1650,6 +1650,107 @@ func TestVolcengineDeepDetailsUseFixedSDKInputsAndAccountRegion(t *testing.T) {
 	}
 }
 
+func TestVolcengineVKEInventoryUsesClusterFilterPaginationAndSafeRows(t *testing.T) {
+	t.Setenv("MCP_TEST_VOLC_VKE_ACCESS", "access")
+	t.Setenv("MCP_TEST_VOLC_VKE_SECRET", "secret")
+	var nodePoolInput *volcvke.ListNodePoolsInput
+	var nodeInput *volcvke.ListNodesInput
+	previous := newVolcengineVKEDetailClient
+	t.Cleanup(func() { newVolcengineVKEDetailClient = previous })
+	newVolcengineVKEDetailClient = func(_ *volcsession.Session) volcengineVKEDetailAPI {
+		return volcengineVKEDetailDeepStub{
+			nodePoolCapture: &nodePoolInput,
+			nodeCapture:     &nodeInput,
+			nodePoolOutput: &volcvke.ListNodePoolsOutput{
+				Items: []*volcvke.ItemForListNodePoolsOutput{{
+					Id:        volc.String("pool-a"),
+					Name:      volc.String("workers"),
+					ClusterId: volc.String("cluster-a"),
+					Status:    &volcvke.StatusForListNodePoolsOutput{Phase: volc.String("Running")},
+					NodeStatistics: &volcvke.NodeStatisticsForListNodePoolsOutput{
+						TotalCount: volc.Int32(6), RunningCount: volc.Int32(6), FailedCount: volc.Int32(0),
+					},
+					AutoScaling: &volcvke.AutoScalingForListNodePoolsOutput{Enabled: volc.Bool(false), DesiredReplicas: volc.Int32(6)},
+					NodeConfig: &volcvke.NodeConfigForListNodePoolsOutput{
+						InstanceTypeIds:  []*string{volc.String("ecs.g3il.2xlarge")},
+						SubnetIds:        []*string{volc.String("subnet-a")},
+						InitializeScript: volc.String("must-not-leak"),
+					},
+				}},
+				TotalCount: volc.Int32(3),
+			},
+			nodeOutput: &volcvke.ListNodesOutput{
+				Items: []*volcvke.ItemForListNodesOutput{{
+					Id:               volc.String("node-a"),
+					MetadataName:     volc.String("worker-a"),
+					ClusterId:        volc.String("cluster-a"),
+					NodePoolId:       volc.String("pool-a"),
+					InstanceId:       volc.String("i-a"),
+					ZoneId:           volc.String("cn-beijing-a"),
+					Status:           &volcvke.StatusForListNodesOutput{Phase: volc.String("Running")},
+					InitializeScript: volc.String("must-not-leak"),
+					KubernetesConfig: &volcvke.KubernetesConfigForListNodesOutput{Cordon: volc.Bool(false)},
+				}},
+				TotalCount: volc.Int32(7),
+			},
+		}
+	}
+	adapter := &volcengineAdapter{name: "volcengine-prod", profile: config.Profile{
+		Credential: config.Credential{Source: "env", Env: map[string]string{
+			"VOLCENGINE_ACCESS_KEY_ID":     "MCP_TEST_VOLC_VKE_ACCESS",
+			"VOLCENGINE_SECRET_ACCESS_KEY": "MCP_TEST_VOLC_VKE_SECRET",
+		}},
+		Scopes: config.Scopes{Accounts: []string{"2000000001"}}, Regions: []string{"cn-beijing"},
+	}}
+	for _, name := range volcengineVKEInventoryOperationNames() {
+		operation := requireOperation(t, adapter.Operations(), name)
+		if operation.Service != "vke" || operation.ValidateParams(map[string]any{"cluster_id": "cluster-a"}) != nil {
+			t.Fatalf("VKE operation = %#v, want closed cluster_id schema", operation)
+		}
+		if operation.ValidateParams(map[string]any{"cluster_id": "cluster-a", "url": "blocked"}) == nil {
+			t.Fatalf("VKE operation %q accepted undeclared URL", name)
+		}
+		if !stringIn(capabilityForSource(adapter.Capabilities(), model.SourceResources).Operations, name) {
+			t.Fatalf("VKE operation %q missing from resource capability", name)
+		}
+	}
+	poolPage, err := adapter.NativeRead(context.Background(), provider.NativeRequest{
+		Operation: volcengineVKEListNodePoolsOperation, Region: "cn-beijing", Params: map[string]any{"cluster_id": "cluster-a"}, Limit: 1,
+	})
+	if err != nil || len(poolPage.Rows) != 1 || poolPage.NextToken != "2" {
+		t.Fatalf("VKE node pool page = %#v, err=%v, want one row and next page 2", poolPage, err)
+	}
+	if nodePoolInput == nil || nodePoolInput.Filter == nil || len(nodePoolInput.Filter.ClusterIds) != 1 || volc.StringValue(nodePoolInput.Filter.ClusterIds[0]) != "cluster-a" || volc.Int32Value(nodePoolInput.PageNumber) != 1 || volc.Int32Value(nodePoolInput.PageSize) != 1 {
+		t.Fatalf("VKE node pool input = %#v, want fixed cluster filter and page 1/1", nodePoolInput)
+	}
+	poolAttributes := poolPage.Rows[0]["attributes"].(map[string]any)
+	if poolPage.Rows[0]["kind"] != "node_pool" || poolPage.Rows[0]["state"] != "running" || poolAttributes["cluster_id"] != "cluster-a" || poolAttributes["node_count"] != 6 {
+		t.Fatalf("VKE node pool row = %#v, want normalized cluster linkage and counts", poolPage.Rows[0])
+	}
+	if strings.Contains(fmt.Sprint(poolPage.Rows[0]), "must-not-leak") {
+		t.Fatalf("VKE node pool row leaked initialization script: %#v", poolPage.Rows[0])
+	}
+	nodePage, err := adapter.NativeRead(context.Background(), provider.NativeRequest{
+		Operation: volcengineVKEListNodesOperation, Region: "cn-beijing", Params: map[string]any{"cluster_id": "cluster-a"}, PageToken: "2", Limit: 100,
+	})
+	if err != nil || len(nodePage.Rows) != 1 || nodePage.NextToken != "" {
+		t.Fatalf("VKE node page = %#v, err=%v, want one final row", nodePage, err)
+	}
+	if nodeInput == nil || nodeInput.Filter == nil || len(nodeInput.Filter.ClusterIds) != 1 || volc.StringValue(nodeInput.Filter.ClusterIds[0]) != "cluster-a" || volc.Int32Value(nodeInput.PageNumber) != 2 || volc.Int32Value(nodeInput.PageSize) != 100 {
+		t.Fatalf("VKE node input = %#v, want fixed cluster filter and page 2/100", nodeInput)
+	}
+	nodeAttributes := nodePage.Rows[0]["attributes"].(map[string]any)
+	if nodePage.Rows[0]["kind"] != "node" || nodePage.Rows[0]["name"] != "worker-a" || nodePage.Rows[0]["state"] != "running" || nodePage.Rows[0]["zone"] != "cn-beijing-a" || nodeAttributes["node_pool_id"] != "pool-a" || nodeAttributes["instance_id"] != "i-a" {
+		t.Fatalf("VKE node row = %#v, want normalized topology fields", nodePage.Rows[0])
+	}
+	if strings.Contains(fmt.Sprint(nodePage.Rows[0]), "must-not-leak") {
+		t.Fatalf("VKE node row leaked initialization script: %#v", nodePage.Rows[0])
+	}
+	if _, _, _, err := validateVolcengineVKEInventoryRequest(provider.NativeRequest{Operation: volcengineVKEListNodesOperation, Params: map[string]any{"cluster_id": "cluster-a"}, PageToken: "opaque"}); !hasProviderErrorCode(err, "invalid_cursor") {
+		t.Fatalf("VKE invalid cursor error = %#v, want invalid_cursor", err)
+	}
+}
+
 func TestHuaweiDeepDetailsUseFixedRequestsAndFailClosedScope(t *testing.T) {
 	t.Setenv("MCP_TEST_HUAWEI_DEEP_AK", "access")
 	t.Setenv("MCP_TEST_HUAWEI_DEEP_SK", "secret")
@@ -2580,8 +2681,12 @@ func (s volcengineRedisDeepStub) DescribeDBInstanceDetailWithContext(_ volc.Cont
 }
 
 type volcengineVKEDetailDeepStub struct {
-	capture **volcvke.ListClustersInput
-	err     error
+	capture         **volcvke.ListClustersInput
+	nodePoolCapture **volcvke.ListNodePoolsInput
+	nodeCapture     **volcvke.ListNodesInput
+	nodePoolOutput  *volcvke.ListNodePoolsOutput
+	nodeOutput      *volcvke.ListNodesOutput
+	err             error
 }
 
 type volcengineTOSDetailDeepStub struct {
@@ -2599,6 +2704,20 @@ func (s *volcengineTOSDetailDeepStub) Close() {}
 func (s volcengineVKEDetailDeepStub) ListClustersWithContext(_ volc.Context, input *volcvke.ListClustersInput, _ ...volcrequest.Option) (*volcvke.ListClustersOutput, error) {
 	*s.capture = input
 	return nil, s.err
+}
+
+func (s volcengineVKEDetailDeepStub) ListNodePoolsWithContext(_ volc.Context, input *volcvke.ListNodePoolsInput, _ ...volcrequest.Option) (*volcvke.ListNodePoolsOutput, error) {
+	if s.nodePoolCapture != nil {
+		*s.nodePoolCapture = input
+	}
+	return s.nodePoolOutput, s.err
+}
+
+func (s volcengineVKEDetailDeepStub) ListNodesWithContext(_ volc.Context, input *volcvke.ListNodesInput, _ ...volcrequest.Option) (*volcvke.ListNodesOutput, error) {
+	if s.nodeCapture != nil {
+		*s.nodeCapture = input
+	}
+	return s.nodeOutput, s.err
 }
 
 func (s volcengineInstanceDetailStub) DescribeInstancesWithContext(_ volc.Context, input *volcecs.DescribeInstancesInput, _ ...volcrequest.Option) (*volcecs.DescribeInstancesOutput, error) {

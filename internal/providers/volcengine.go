@@ -37,6 +37,9 @@ func (a *volcengineAdapter) Profile() string          { return a.name }
 func (a *volcengineAdapter) Capabilities() []provider.Capability {
 	c := capabilities(model.ProviderVolcengine, volcengineResourcesOperation, volcengineMetricsOperation, volcengineCostsOperation)
 	for i := range c {
+		if c[i].Source == model.SourceResources {
+			c[i].Operations = append(c[i].Operations, volcengineVKEInventoryOperationNames()...)
+		}
 		if c[i].Source == model.SourceMetrics && len(a.profile.Scopes.Accounts) != 1 {
 			c[i].Status = "not_configured"
 			c[i].Notes = "requires exactly one scopes.accounts entry because CloudMonitor does not select a target account"
@@ -48,7 +51,8 @@ func (a *volcengineAdapter) Operations() []provider.Operation {
 	operations := []provider.Operation{operation(volcengineResourcesOperation, model.ProviderVolcengine, "resourcecenter", "Search Volcengine Resource Center", map[string]any{"resource_type": map[string]any{"type": "string"}, "resource_id": map[string]any{"type": "string"}, "region": map[string]any{"type": "string"}, "service": map[string]any{"type": "string"}, "project_name": map[string]any{"type": "string"}})}
 	operations = append(operations, nativeProductOperations(model.ProviderVolcengine, "resourcecenter")...)
 	operations = append(operations, instanceDetailOperations(model.ProviderVolcengine)...)
-	return append(operations, deepDetailOperations(model.ProviderVolcengine)...)
+	operations = append(operations, deepDetailOperations(model.ProviderVolcengine)...)
+	return append(operations, volcengineVKEInventoryOperations()...)
 }
 func (a *volcengineAdapter) Readiness(context.Context) model.ProfileStatus {
 	return readiness(a.name, model.ProviderVolcengine, a.profile, []string{"VOLCENGINE_ACCESS_KEY_ID", "VOLCENGINE_SECRET_ACCESS_KEY"})
@@ -82,6 +86,9 @@ func (a *volcengineAdapter) NativeRead(ctx context.Context, req provider.NativeR
 	}
 	if detail, ok := deepDetailFor(model.ProviderVolcengine, req.Operation); ok {
 		return a.readDeepDetail(ctx, req, detail)
+	}
+	if isVolcengineVKEInventoryOperation(req.Operation) {
+		return a.readVKEInventory(ctx, req)
 	}
 	product, productRead := nativeProductFor(model.ProviderVolcengine, req.Operation)
 	if productRead {
