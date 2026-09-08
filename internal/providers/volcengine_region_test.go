@@ -80,3 +80,33 @@ func TestVolcengineNativeInventoryRegion(t *testing.T) {
 		}
 	}
 }
+
+func TestVolcengineProjectNameIsFilteredLocally(t *testing.T) {
+	t.Setenv("MCP_TEST_VOLC_ACCESS", "access")
+	t.Setenv("MCP_TEST_VOLC_SECRET", "secret")
+	adapter := &volcengineAdapter{name: "test", profile: config.Profile{
+		Credential: config.Credential{Source: "env", Env: map[string]string{
+			"VOLCENGINE_ACCESS_KEY_ID": "MCP_TEST_VOLC_ACCESS", "VOLCENGINE_SECRET_ACCESS_KEY": "MCP_TEST_VOLC_SECRET",
+		}}, Regions: []string{"cn-shanghai"},
+	}}
+	previous := http.DefaultClient
+	t.Cleanup(func() { http.DefaultClient = previous })
+	http.DefaultClient = &http.Client{Transport: providerTestRoundTripper(func(req *http.Request) (*http.Response, error) {
+		var body map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		for _, raw := range body["Filter"].([]any) {
+			if key := raw.(map[string]any)["Key"]; key == "ProjectName" || key == "Service" {
+				t.Fatalf("unsupported %s filter was sent to Resource Center", key)
+			}
+		}
+		return providerTestHTTPResponse(req, `{"Result":{"Resources":[{"ResourceID":"one","ProjectName":"guance-sit","Region":"cn-shanghai","Service":"clb"},{"ResourceID":"two","ProjectName":"default","Region":"cn-shanghai","Service":"clb"}],"NextToken":"next-page"}}`), nil
+	})}
+	page, err := adapter.NativeRead(context.Background(), provider.NativeRequest{
+		Operation: volcengineResourcesOperation, Region: "cn-shanghai", Params: map[string]any{"project_name": "guance-sit", "service": "clb"}, Limit: 2,
+	})
+	if err != nil || len(page.Rows) != 1 || page.Rows[0]["id"] != "one" || page.Scanned != 2 || page.NextToken != "next-page" {
+		t.Fatalf("project-filtered page = %#v, err=%v", page, err)
+	}
+}
