@@ -24,6 +24,8 @@ type volcengineRDSDetailAPI interface {
 
 type volcengineVKEDetailAPI interface {
 	ListClustersWithContext(volc.Context, *vke.ListClustersInput, ...request.Option) (*vke.ListClustersOutput, error)
+	ListNodePoolsWithContext(volc.Context, *vke.ListNodePoolsInput, ...request.Option) (*vke.ListNodePoolsOutput, error)
+	ListNodesWithContext(volc.Context, *vke.ListNodesInput, ...request.Option) (*vke.ListNodesOutput, error)
 }
 
 type volcengineRedisDetailAPI interface {
