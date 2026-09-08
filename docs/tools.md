@@ -102,7 +102,7 @@ Use this only when a normalized DSL field is insufficient and `cloud_schema` lis
 
 The operation name and parameter shape are selected from the registry. Arbitrary URLs, HTTP methods, API action names, SDK method names, provider-native query strings, and write operations are rejected before a provider call. The 63 product-level operation names and their exact `params` schemas are:
 
-Volcengine inventory operations apply an exact top-level `region` as a Resource Center filter. The legacy `params.region` filter remains supported; when both specify different exact regions, the request is rejected before any provider call. Continue pagination with the same region and parameters.
+Volcengine inventory operations apply an exact top-level `region` as a Resource Center filter. Resource Center rejects `ProjectName` and `Service` as API filter keys, so `params.project_name` and the internal product service selector are applied to each normalized provider page; callers must continue the returned cursor to prove a complete project result. The legacy `params.region` filter remains supported; when both regions differ, the request is rejected before any provider call.
 
 | Provider | Product-level operation names | `params` schema for each listed operation |
 | --- | --- | --- |
@@ -169,6 +169,10 @@ The normalized result never returns a password, connection string, database endp
 ### Volcengine VKE topology list operations
 
 `volcengine.vke.list_node_pools` and `volcengine.vke.list_nodes` call the fixed VKE `ListNodePools` and `ListNodes` APIs. Both require only `params.cluster_id`, an exact top-level `region`, and exactly one profile account. The cluster ID is pushed into `Filter.ClusterIds`; results are paginated through the normal opaque MCP cursor and filtered again to the requested cluster. Output contains bounded normalized identity, state, node-pool association, capacity, instance/image/network identifiers, and posture metadata. Initialization scripts, labels, taints, private addresses, kubeconfigs, certificates, tokens, and complete SDK responses are excluded.
+
+### Volcengine network and TOS configuration operations
+
+Volcengine registers ten fixed reads: CLB instance, listeners, listener health and server-group membership; EIP attributes; NAT list, instance, SNAT and DNAT; and TOS bucket configuration. List operations use the provider's numeric pagination behind the opaque MCP cursor. `volcengine.nat.list_nat_gateways` requires `params.project_name` and accepts `network_type=internet|intranet`; both are pushed into `DescribeNatGateways`, making it the authoritative public/private empty-project check because Resource Center does not index the observed NAT gateway. TOS configuration returns ACL public-access posture, versioning, lifecycle counts, and delayed bucket statistics without listing or reading objects. NAT address/port mappings, backend addresses, ACL principals, owner identifiers, credentials, certificates, and object bodies are excluded.
 
 Example database detail read:
 

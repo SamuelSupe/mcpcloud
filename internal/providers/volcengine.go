@@ -39,6 +39,7 @@ func (a *volcengineAdapter) Capabilities() []provider.Capability {
 	for i := range c {
 		if c[i].Source == model.SourceResources {
 			c[i].Operations = append(c[i].Operations, volcengineVKEInventoryOperationNames()...)
+			c[i].Operations = append(c[i].Operations, volcengineNetworkDetailOperationNames()...)
 		}
 		if c[i].Source == model.SourceMetrics && len(a.profile.Scopes.Accounts) != 1 {
 			c[i].Status = "not_configured"
@@ -52,7 +53,8 @@ func (a *volcengineAdapter) Operations() []provider.Operation {
 	operations = append(operations, nativeProductOperations(model.ProviderVolcengine, "resourcecenter")...)
 	operations = append(operations, instanceDetailOperations(model.ProviderVolcengine)...)
 	operations = append(operations, deepDetailOperations(model.ProviderVolcengine)...)
-	return append(operations, volcengineVKEInventoryOperations()...)
+	operations = append(operations, volcengineVKEInventoryOperations()...)
+	return append(operations, volcengineNetworkDetailOperations()...)
 }
 func (a *volcengineAdapter) Readiness(context.Context) model.ProfileStatus {
 	return readiness(a.name, model.ProviderVolcengine, a.profile, []string{"VOLCENGINE_ACCESS_KEY_ID", "VOLCENGINE_SECRET_ACCESS_KEY"})
@@ -90,6 +92,9 @@ func (a *volcengineAdapter) NativeRead(ctx context.Context, req provider.NativeR
 	if isVolcengineVKEInventoryOperation(req.Operation) {
 		return a.readVKEInventory(ctx, req)
 	}
+	if isVolcengineNetworkDetailOperation(req.Operation) {
+		return a.readNetworkDetail(ctx, req)
+	}
 	product, productRead := nativeProductFor(model.ProviderVolcengine, req.Operation)
 	if productRead {
 		if err := validateNativeProductRequest(model.ProviderVolcengine, req.Operation, req.Params); err != nil {
@@ -104,7 +109,7 @@ func (a *volcengineAdapter) NativeRead(ctx context.Context, req provider.NativeR
 		return provider.Page{}, &provider.Error{Code: "operation_not_allowed", Operation: req.Operation, Message: "operation is not registered"}
 	}
 	filters := map[string][]string{}
-	for param, key := range map[string]string{"resource_type": "ResourceType", "resource_id": "ResourceID", "region": "Region", "service": "Service", "project_name": "ProjectName"} {
+	for param, key := range map[string]string{"resource_type": "ResourceType", "resource_id": "ResourceID", "region": "Region"} {
 		value, err := nativeString(req.Params, param)
 		if err != nil {
 			return provider.Page{}, err
@@ -122,7 +127,35 @@ func (a *volcengineAdapter) NativeRead(ctx context.Context, req provider.NativeR
 		}
 		filters["Region"] = []string{req.Region}
 	}
-	return a.search(ctx, filters, req.PageToken, req.Limit)
+	projectName, err := nativeString(req.Params, "project_name")
+	if err != nil {
+		return provider.Page{}, err
+	}
+	service, err := nativeString(req.Params, "service")
+	if err != nil {
+		return provider.Page{}, err
+	}
+	page, err := a.search(ctx, filters, req.PageToken, req.Limit)
+	if err != nil || (projectName == "" && service == "") {
+		return page, err
+	}
+	rows := make([]map[string]any, 0, len(page.Rows))
+	for _, row := range page.Rows {
+		attributes, _ := row["attributes"].(map[string]any)
+		if projectName != "" {
+			if value, _ := attributes["project_name"].(string); value != projectName {
+				continue
+			}
+		}
+		if service != "" {
+			if value, _ := row["service"].(string); !strings.EqualFold(value, service) {
+				continue
+			}
+		}
+		rows = append(rows, row)
+	}
+	page.Rows = rows
+	return page, nil
 }
 
 func (a *volcengineAdapter) search(ctx context.Context, filters map[string][]string, pageToken string, limit int) (provider.Page, error) {

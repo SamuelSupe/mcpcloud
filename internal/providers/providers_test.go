@@ -2699,6 +2699,19 @@ func (s *volcengineTOSDetailDeepStub) GetBucketInfo(_ context.Context, input *vo
 	return nil, s.err
 }
 
+func (s *volcengineTOSDetailDeepStub) GetBucketACL(context.Context, *volctos.GetBucketACLInput) (*volctos.GetBucketACLOutput, error) {
+	return nil, s.err
+}
+func (s *volcengineTOSDetailDeepStub) GetBucketVersioning(context.Context, *volctos.GetBucketVersioningInput) (*volctos.GetBucketVersioningOutputV2, error) {
+	return nil, s.err
+}
+func (s *volcengineTOSDetailDeepStub) GetBucketLifecycle(context.Context, *volctos.GetBucketLifecycleInput) (*volctos.GetBucketLifecycleOutput, error) {
+	return nil, s.err
+}
+func (s *volcengineTOSDetailDeepStub) GetBucketStat(context.Context, *volctos.GetBucketStatInput) (*volctos.GetBucketStatOutput, error) {
+	return nil, s.err
+}
+
 func (s *volcengineTOSDetailDeepStub) Close() {}
 
 func (s volcengineVKEDetailDeepStub) ListClustersWithContext(_ volc.Context, input *volcvke.ListClustersInput, _ ...volcrequest.Option) (*volcvke.ListClustersOutput, error) {

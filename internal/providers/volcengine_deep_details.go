@@ -34,6 +34,10 @@ type volcengineRedisDetailAPI interface {
 
 type volcengineTOSDetailAPI interface {
 	GetBucketInfo(context.Context, *volctos.GetBucketInfoInput) (*volctos.GetBucketInfoOutput, error)
+	GetBucketACL(context.Context, *volctos.GetBucketACLInput) (*volctos.GetBucketACLOutput, error)
+	GetBucketVersioning(context.Context, *volctos.GetBucketVersioningInput) (*volctos.GetBucketVersioningOutputV2, error)
+	GetBucketLifecycle(context.Context, *volctos.GetBucketLifecycleInput) (*volctos.GetBucketLifecycleOutput, error)
+	GetBucketStat(context.Context, *volctos.GetBucketStatInput) (*volctos.GetBucketStatOutput, error)
 	Close()
 }
 
