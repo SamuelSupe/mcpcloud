@@ -19,6 +19,7 @@ require (
 	github.com/huaweicloud/huaweicloud-sdk-go-v3 v0.1.212
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.3.168
+	github.com/volcengine/ve-tos-golang-sdk/v2 v2.9.8
 	github.com/volcengine/volcengine-go-sdk v1.2.49
 	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/oauth2 v0.36.0

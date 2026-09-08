@@ -28,6 +28,8 @@ import (
 	rdsmodel "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/rds/v3/model"
 	tencent "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common"
 	tchttp "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/http"
+	volctos "github.com/volcengine/ve-tos-golang-sdk/v2/tos"
+	volctosenum "github.com/volcengine/ve-tos-golang-sdk/v2/tos/enum"
 	volcecs "github.com/volcengine/volcengine-go-sdk/service/ecs"
 	volcrds "github.com/volcengine/volcengine-go-sdk/service/rdsmysqlv2"
 	volcredis "github.com/volcengine/volcengine-go-sdk/service/redis"
@@ -1288,7 +1290,7 @@ func TestDeepDetailCatalogRegistersClosedOperationsAndCapabilities(t *testing.T)
 		specs := deepDetailCatalog[adapter.Provider()]
 		want := 2
 		if adapter.Provider() == model.ProviderVolcengine {
-			want = 3
+			want = 4
 		}
 		if len(specs) != want {
 			t.Fatalf("%s deep detail catalog entries = %d, want %d", adapter.Provider(), len(specs), want)
@@ -1333,7 +1335,7 @@ func TestDeepDetailCatalogRegistersClosedOperationsAndCapabilities(t *testing.T)
 			}
 		}
 	}
-	want := len(model.Providers)*2 + 1
+	want := len(model.Providers)*2 + 2
 	if len(seen) != want {
 		t.Fatalf("deep detail operation count = %d, want %d", len(seen), want)
 	}
@@ -1591,9 +1593,11 @@ func TestVolcengineDeepDetailsUseFixedSDKInputsAndAccountRegion(t *testing.T) {
 	var rdsInput *volcrds.DescribeDBInstanceDetailInput
 	var redisInput *volcredis.DescribeDBInstanceDetailInput
 	var vkeInput *volcvke.ListClustersInput
-	previousRDS, previousRedis, previousVKE := newVolcengineRDSDetailClient, newVolcengineRedisDetailClient, newVolcengineVKEDetailClient
+	var tosInput *volctos.GetBucketInfoInput
+	previousRDS, previousRedis, previousVKE, previousTOS := newVolcengineRDSDetailClient, newVolcengineRedisDetailClient, newVolcengineVKEDetailClient, newVolcengineTOSDetailClient
 	t.Cleanup(func() {
 		newVolcengineRDSDetailClient, newVolcengineRedisDetailClient, newVolcengineVKEDetailClient = previousRDS, previousRedis, previousVKE
+		newVolcengineTOSDetailClient = previousTOS
 	})
 	newVolcengineRDSDetailClient = func(_ *volcsession.Session) volcengineRDSDetailAPI {
 		return volcengineRDSDeepStub{capture: &rdsInput, err: fmt.Errorf("stub RDS")}
@@ -1603,6 +1607,12 @@ func TestVolcengineDeepDetailsUseFixedSDKInputsAndAccountRegion(t *testing.T) {
 	}
 	newVolcengineVKEDetailClient = func(_ *volcsession.Session) volcengineVKEDetailAPI {
 		return volcengineVKEDetailDeepStub{capture: &vkeInput, err: fmt.Errorf("stub VKE")}
+	}
+	newVolcengineTOSDetailClient = func(_ config.Profile, region, _ string) (volcengineTOSDetailAPI, error) {
+		if region != "cn-beijing" {
+			t.Errorf("Volcengine TOS region = %q, want cn-beijing", region)
+		}
+		return &volcengineTOSDetailDeepStub{capture: &tosInput, err: fmt.Errorf("stub TOS")}, nil
 	}
 	adapter := &volcengineAdapter{name: "volcengine-prod", profile: config.Profile{
 		Credential: config.Credential{Source: "env", Env: map[string]string{
@@ -1618,6 +1628,7 @@ func TestVolcengineDeepDetailsUseFixedSDKInputsAndAccountRegion(t *testing.T) {
 		{operation: "volcengine.rdsmysql.describe_db_instance_detail", params: map[string]any{"instance_id": "db-1"}},
 		{operation: "volcengine.redis.describe_db_instance_detail", params: map[string]any{"instance_id": "redis-1"}},
 		{operation: "volcengine.vke.list_clusters", params: map[string]any{"cluster_id": "cluster-a"}},
+		{operation: "volcengine.tos.get_bucket_info", params: map[string]any{"bucket_name": "bucket-a"}},
 	} {
 		_, err := adapter.NativeRead(context.Background(), provider.NativeRequest{Operation: tt.operation, Region: "cn-beijing", Params: tt.params})
 		requireDeepProviderError(t, err, tt.operation, "volcengine_api_error")
@@ -1630,6 +1641,9 @@ func TestVolcengineDeepDetailsUseFixedSDKInputsAndAccountRegion(t *testing.T) {
 	}
 	if vkeInput == nil || vkeInput.Filter == nil || len(vkeInput.Filter.Ids) != 1 || volc.StringValue(vkeInput.Filter.Ids[0]) != "cluster-a" || volc.Int32Value(vkeInput.PageNumber) != 1 || volc.Int32Value(vkeInput.PageSize) != 1 {
 		t.Fatalf("Volcengine VKE input = %#v, want one ID and page 1/1", vkeInput)
+	}
+	if tosInput == nil || tosInput.Bucket != "bucket-a" {
+		t.Fatalf("Volcengine TOS input = %#v, want only Bucket=bucket-a", tosInput)
 	}
 	if _, err := adapter.NativeRead(context.Background(), provider.NativeRequest{Operation: "volcengine.vke.list_clusters", Region: "cn-shanghai", Params: map[string]any{"cluster_id": "cluster-a"}}); !hasProviderErrorCode(err, "scope_not_allowed") {
 		t.Fatalf("Volcengine out-of-allowlist region error = %#v, want scope_not_allowed", err)
@@ -2133,9 +2147,28 @@ func TestVolcengineConsoleEvidenceNormalization(t *testing.T) {
 	}
 	assertDeepDetailRowSafe(t, redisRow, "volcengine-redis", "account_id", "2000000001")
 
-	tosRow := adapter.row(&volcresourcecenter.ResourceForSearchResourcesOutput{ResourceID: volc.String("sh-sit-tos-scopedb"), Service: volc.String("tos")}, stableObservedTime)
-	if tosRow["name"] != "sh-sit-tos-scopedb" {
-		t.Fatalf("Volcengine TOS name = %#v, want ResourceID fallback", tosRow["name"])
+	tosRow := adapter.volcengineTOSDetailRow(&volctos.GetBucketInfoOutput{Bucket: volctos.BucketInfo{
+		Name: "bucket-a", CreationDate: stableObservedTime, StorageClass: volctosenum.StorageClassStandard,
+		ProjectName: "project-a", Type: volctosenum.BucketTypeFNS, Location: "cn-shanghai", AzRedundancy: volctosenum.AzRedundancySingleAz,
+		Versioning: "Enabled", CrossRegionReplication: volctosenum.StatusEnabled, TransferAcceleration: volctosenum.StatusDisabled,
+		AccessMonitor: volctosenum.StatusEnabled, ExtranetEndpoint: "must-not-leak.tos.volces.com",
+		ServerSideEncryptionConfiguration: volctos.ServerSideEncryptionConfiguration{Rule: volctos.BucketEncryptionRule{
+			ApplyServerSideEncryptionByDefault: volctos.ApplyServerSideEncryptionByDefault{SSEAlgorithm: "AES256", KMSMasterKeyID: "must-not-leak-kms"},
+		}},
+	}}, "cn-beijing", "2000000001")
+	tosAttributes := tosRow["attributes"].(map[string]any)
+	if tosRow["id"] != "bucket-a" || tosRow["region"] != "cn-shanghai" || tosAttributes["storage_class"] != "STANDARD" || tosAttributes["bucket_type"] != "fns" || tosAttributes["server_side_encryption_algorithm"] != "AES256" {
+		t.Fatalf("Volcengine TOS attributes = %#v, row=%#v", tosAttributes, tosRow)
+	}
+	tosPosture := tosAttributes["posture"].(map[string]any)
+	if tosPosture["multi_zone"] != false || tosPosture["versioning_enabled"] != true || tosPosture["cross_region_replication_enabled"] != true || tosPosture["transfer_acceleration_enabled"] != false || tosPosture["access_monitor_enabled"] != true || tosPosture["server_side_encryption_enabled"] != true {
+		t.Fatalf("Volcengine TOS posture = %#v, want normalized provider flags", tosPosture)
+	}
+	assertDeepDetailRowSafe(t, tosRow, "volcengine-tos", "account_id", "2000000001")
+
+	tosInventoryRow := adapter.row(&volcresourcecenter.ResourceForSearchResourcesOutput{ResourceID: volc.String("sh-sit-tos-scopedb"), Service: volc.String("tos")}, stableObservedTime)
+	if tosInventoryRow["name"] != "sh-sit-tos-scopedb" {
+		t.Fatalf("Volcengine TOS name = %#v, want ResourceID fallback", tosInventoryRow["name"])
 	}
 	if got := firstDimension(map[string]string{"ResourceID": "i-yee5a5aq68vr6on043hw"}); got != "i-yee5a5aq68vr6on043hw" {
 		t.Fatalf("firstDimension(ResourceID) = %q, want ECS instance ID", got)
@@ -2394,6 +2427,7 @@ func assertDeepDetailRowSafe(t *testing.T, row map[string]any, providerName, sco
 	forbidden := map[string]bool{
 		"password": true, "connectionstring": true, "endpoint": true, "kubeconfig": true,
 		"certificate": true, "token": true, "secret": true, "userdata": true, "customdata": true, "metadata": true,
+		"owner": true, "kmsmasterkeyid": true,
 	}
 	var walk func(any)
 	walk = func(value any) {
@@ -2549,6 +2583,18 @@ type volcengineVKEDetailDeepStub struct {
 	capture **volcvke.ListClustersInput
 	err     error
 }
+
+type volcengineTOSDetailDeepStub struct {
+	capture **volctos.GetBucketInfoInput
+	err     error
+}
+
+func (s *volcengineTOSDetailDeepStub) GetBucketInfo(_ context.Context, input *volctos.GetBucketInfoInput) (*volctos.GetBucketInfoOutput, error) {
+	*s.capture = input
+	return nil, s.err
+}
+
+func (s *volcengineTOSDetailDeepStub) Close() {}
 
 func (s volcengineVKEDetailDeepStub) ListClustersWithContext(_ volc.Context, input *volcvke.ListClustersInput, _ ...volcrequest.Option) (*volcvke.ListClustersOutput, error) {
 	*s.capture = input
