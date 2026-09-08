@@ -2133,8 +2133,7 @@ func TestVolcengineConsoleEvidenceNormalization(t *testing.T) {
 	}
 	assertDeepDetailRowSafe(t, redisRow, "volcengine-redis", "account_id", "2000000001")
 
-	tosType := "Volcengine::TOS::Bucket"
-	tosRow := adapter.row(&volcresourcecenter.ResourceForSearchResourcesOutput{ResourceID: volc.String("sh-sit-tos-scopedb"), ResourceType: &tosType}, stableObservedTime)
+	tosRow := adapter.row(&volcresourcecenter.ResourceForSearchResourcesOutput{ResourceID: volc.String("sh-sit-tos-scopedb"), Service: volc.String("tos")}, stableObservedTime)
 	if tosRow["name"] != "sh-sit-tos-scopedb" {
 		t.Fatalf("Volcengine TOS name = %#v, want ResourceID fallback", tosRow["name"])
 	}
