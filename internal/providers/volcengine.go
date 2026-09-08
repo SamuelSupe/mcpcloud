@@ -190,13 +190,13 @@ func (a *volcengineAdapter) row(resource *resourcecenter.ResourceForSearchResour
 	if resource.ResourceName != nil {
 		name = *resource.ResourceName
 	}
-	if name == "" && resource.ResourceType != nil && *resource.ResourceType == "Volcengine::TOS::Bucket" {
-		// Resource Center returns the bucket name in ResourceID and leaves
-		// ResourceName empty for TOS buckets.
-		name = id
-	}
 	if resource.Service != nil {
 		service = *resource.Service
+	}
+	if name == "" && strings.EqualFold(service, "tos") {
+		// Resource Center returns the bucket name in ResourceID and leaves
+		// ResourceName and its type fields empty for TOS buckets.
+		name = id
 	}
 	if resource.TypeName != nil {
 		nativeType = *resource.TypeName
