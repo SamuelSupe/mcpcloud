@@ -48,6 +48,7 @@ var deepDetailCatalog = map[model.Provider][]deepDetailSpec{
 		{operation: "volcengine.rdsmysql.describe_db_instance_detail", service: "rdsmysql", domain: "database", kind: "database", description: "Get one Volcengine RDS MySQL instance", parameters: detailParameters("instance_id"), required: []string{"instance_id"}},
 		{operation: "volcengine.redis.describe_db_instance_detail", service: "redis", domain: "database", kind: "cache", description: "Get one Volcengine Cache for Redis instance", parameters: detailParameters("instance_id"), required: []string{"instance_id"}},
 		{operation: "volcengine.vke.list_clusters", service: "vke", domain: "kubernetes", kind: "cluster", description: "Get one VKE cluster using the ID-filtered ListClusters API", parameters: detailParameters("cluster_id"), required: []string{"cluster_id"}},
+		{operation: "volcengine.tos.get_bucket_info", service: "tos", domain: "storage", kind: "bucket", description: "Get one Volcengine TOS bucket without listing objects", parameters: detailParameters("bucket_name"), required: []string{"bucket_name"}},
 	},
 }
 

@@ -2,9 +2,11 @@ package providers
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
+	volctos "github.com/volcengine/ve-tos-golang-sdk/v2/tos"
 	"github.com/volcengine/volcengine-go-sdk/service/rdsmysqlv2"
 	"github.com/volcengine/volcengine-go-sdk/service/redis"
 	"github.com/volcengine/volcengine-go-sdk/service/vke"
@@ -12,6 +14,7 @@ import (
 	"github.com/volcengine/volcengine-go-sdk/volcengine/request"
 	"github.com/volcengine/volcengine-go-sdk/volcengine/session"
 
+	"mcpcloud/internal/config"
 	"mcpcloud/internal/provider"
 )
 
@@ -27,9 +30,33 @@ type volcengineRedisDetailAPI interface {
 	DescribeDBInstanceDetailWithContext(volc.Context, *redis.DescribeDBInstanceDetailInput, ...request.Option) (*redis.DescribeDBInstanceDetailOutput, error)
 }
 
+type volcengineTOSDetailAPI interface {
+	GetBucketInfo(context.Context, *volctos.GetBucketInfoInput) (*volctos.GetBucketInfoOutput, error)
+	Close()
+}
+
 var newVolcengineRDSDetailClient = func(sess *session.Session) volcengineRDSDetailAPI { return rdsmysqlv2.New(sess) }
 var newVolcengineRedisDetailClient = func(sess *session.Session) volcengineRedisDetailAPI { return redis.New(sess) }
 var newVolcengineVKEDetailClient = func(sess *session.Session) volcengineVKEDetailAPI { return vke.New(sess) }
+var newVolcengineTOSDetailClient = func(profile config.Profile, region, operation string) (volcengineTOSDetailAPI, error) {
+	access := envValue(profile, "VOLCENGINE_ACCESS_KEY_ID", "VOLCENGINE_ACCESS_KEY_ID")
+	secret := envValue(profile, "VOLCENGINE_SECRET_ACCESS_KEY", "VOLCENGINE_SECRET_ACCESS_KEY")
+	if access == "" || secret == "" {
+		return nil, &provider.Error{Code: "missing_credentials", Operation: operation, Message: "Volcengine credential environment variables are not set"}
+	}
+	credentials := volctos.NewStaticCredentials(access, secret)
+	credentials.WithSecurityToken(envValue(profile, "VOLCENGINE_SESSION_TOKEN", "VOLCENGINE_SESSION_TOKEN"))
+	client, err := volctos.NewClientV2(
+		fmt.Sprintf("https://tos-%s.volces.com", region),
+		volctos.WithRegion(region),
+		volctos.WithCredentials(credentials),
+		volctos.WithMaxRetryCount(0),
+	)
+	if err != nil {
+		return nil, &provider.Error{Code: "authentication_error", Operation: operation, Message: err.Error()}
+	}
+	return client, nil
+}
 
 func (a *volcengineAdapter) readDeepDetail(ctx context.Context, nativeRequest provider.NativeRequest, spec deepDetailSpec) (provider.Page, error) {
 	if err := validateDeepDetailRequest(spec, nativeRequest); err != nil {
@@ -42,6 +69,25 @@ func (a *volcengineAdapter) readDeepDetail(ctx context.Context, nativeRequest pr
 	region, err := exactDetailRegion(nativeRequest.Region, a.profile.Regions, spec.operation)
 	if err != nil {
 		return provider.Page{}, err
+	}
+	if spec.service == "tos" {
+		name, err := nativeIdentifier(nativeRequest.Params, "bucket_name")
+		if err != nil {
+			return provider.Page{}, deepParameterError(spec.operation, err)
+		}
+		client, err := newVolcengineTOSDetailClient(a.profile, region, spec.operation)
+		if err != nil {
+			return provider.Page{}, err
+		}
+		defer client.Close()
+		output, err := client.GetBucketInfo(ctx, &volctos.GetBucketInfoInput{Bucket: name})
+		if err != nil {
+			return provider.Page{}, volcengineDeepError(spec.operation, err)
+		}
+		if output == nil || output.Bucket.Name != name {
+			return provider.Page{Requests: 1}, deepNotFound(spec.operation, spec.kind)
+		}
+		return oneDeepDetailPage(a.volcengineTOSDetailRow(output, region, account)), nil
 	}
 	sess, err := a.session(region, spec.operation)
 	if err != nil {
@@ -94,6 +140,35 @@ func (a *volcengineAdapter) readDeepDetail(ctx context.Context, nativeRequest pr
 		}
 	}
 	return provider.Page{Requests: 1}, deepNotFound(spec.operation, spec.kind)
+}
+
+func (a *volcengineAdapter) volcengineTOSDetailRow(output *volctos.GetBucketInfoOutput, fallbackRegion, account string) map[string]any {
+	detail := output.Bucket
+	region := detail.Location
+	if region == "" {
+		region = fallbackRegion
+	}
+	row := newDeepDetailRow(a.Provider(), a.name, detail.Name, detail.Name, "tos", "TOS::Bucket", "storage", "bucket", region, account)
+	row["state"] = "available"
+	if !detail.CreationDate.IsZero() {
+		row["created_at"] = detail.CreationDate.UTC().Format(time.RFC3339Nano)
+	}
+	attributes := row["attributes"].(map[string]any)
+	attributes["storage_class"] = string(detail.StorageClass)
+	attributes["bucket_type"] = string(detail.Type)
+	attributes["project_name"] = detail.ProjectName
+	algorithm := detail.ServerSideEncryptionConfiguration.Rule.ApplyServerSideEncryptionByDefault.SSEAlgorithm
+	if algorithm != "" {
+		attributes["server_side_encryption_algorithm"] = algorithm
+	}
+	setPosture(row, "multi_zone", strings.EqualFold(string(detail.AzRedundancy), "multi-az"))
+	setPosture(row, "versioning_enabled", volcengineFlagEnabled(detail.Versioning))
+	setPosture(row, "cross_region_replication_enabled", volcengineFlagEnabled(string(detail.CrossRegionReplication)))
+	setPosture(row, "transfer_acceleration_enabled", volcengineFlagEnabled(string(detail.TransferAcceleration)))
+	setPosture(row, "access_monitor_enabled", volcengineFlagEnabled(string(detail.AccessMonitor)))
+	setPosture(row, "server_side_encryption_enabled", algorithm != "")
+	row["native"].(map[string]any)["instance_type"] = string(detail.Type)
+	return row
 }
 
 func volcengineDeepError(operation string, err error) error {
