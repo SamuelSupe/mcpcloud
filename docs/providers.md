@@ -46,7 +46,7 @@ Detail output is limited to common identity/scope/state fields and provider-supp
 
 ## Managed database, cache, Kubernetes, and storage detail operations
 
-Each provider registers one managed database detail operation and one managed Kubernetes detail operation. They are read-only service-level metadata reads, distinct from both the 63 inventory operations and the seven compute-instance details, and remain live-unverified.
+Each provider registers one managed database detail operation and one managed Kubernetes detail operation; Volcengine additionally registers Redis and TOS bucket detail operations. They are read-only service-level metadata reads, distinct from both the 63 inventory operations and the seven compute-instance details, and remain live-unverified in this repository.
 
 | Provider | Managed service operation and fixed API | Kubernetes operation and fixed API | Exact parameters and provider scope |
 | --- | --- | --- | --- |
