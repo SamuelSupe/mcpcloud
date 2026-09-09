@@ -54,25 +54,57 @@ var newAlibabaCSDetailClient = func(profile config.Profile, region string) (alib
 }
 
 type alibabaACKDetailResponse struct {
-	ClusterID          string            `json:"cluster_id"`
-	Name               string            `json:"name"`
-	State              string            `json:"state"`
-	RegionID           string            `json:"region_id"`
-	ZoneID             string            `json:"zone_id"`
-	ClusterType        string            `json:"cluster_type"`
-	KubernetesVersion  string            `json:"current_version"`
-	Created            string            `json:"created"`
-	Updated            string            `json:"updated"`
-	VPCID              string            `json:"vpc_id"`
-	VSwitchID          string            `json:"vswitch_id"`
-	VSwitchIDs         []string          `json:"vswitch_ids"`
-	ContainerCIDR      string            `json:"container_cidr"`
-	ServiceCIDR        string            `json:"service_cidr"`
-	SecurityGroupID    string            `json:"security_group_id"`
-	DeletionProtection bool              `json:"deletion_protection"`
-	PrivateZone        bool              `json:"private_zone"`
-	Profile            string            `json:"profile"`
-	Tags               map[string]string `json:"tags"`
+	ClusterID          string         `json:"cluster_id"`
+	Name               string         `json:"name"`
+	State              string         `json:"state"`
+	RegionID           string         `json:"region_id"`
+	ZoneID             string         `json:"zone_id"`
+	ClusterType        string         `json:"cluster_type"`
+	KubernetesVersion  string         `json:"current_version"`
+	Created            string         `json:"created"`
+	Updated            string         `json:"updated"`
+	VPCID              string         `json:"vpc_id"`
+	VSwitchID          string         `json:"vswitch_id"`
+	VSwitchIDs         []string       `json:"vswitch_ids"`
+	ContainerCIDR      string         `json:"container_cidr"`
+	ServiceCIDR        string         `json:"service_cidr"`
+	SecurityGroupID    string         `json:"security_group_id"`
+	DeletionProtection bool           `json:"deletion_protection"`
+	PrivateZone        bool           `json:"private_zone"`
+	Profile            string         `json:"profile"`
+	Tags               alibabaACKTags `json:"tags"`
+}
+
+// ACK has returned tags both as an object and as an array of key/value objects
+// across API versions. Accept both shapes so a harmless response variation does
+// not make the entire fixed-detail call fail.
+type alibabaACKTags map[string]string
+
+func (tags *alibabaACKTags) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" || len(data) == 0 {
+		*tags = nil
+		return nil
+	}
+	var object map[string]string
+	if err := json.Unmarshal(data, &object); err == nil {
+		*tags = object
+		return nil
+	}
+	var list []struct {
+		Key   string `json:"key"`
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(data, &list); err != nil {
+		return err
+	}
+	object = make(map[string]string, len(list))
+	for _, tag := range list {
+		if tag.Key != "" {
+			object[tag.Key] = tag.Value
+		}
+	}
+	*tags = object
+	return nil
 }
 
 func (a *alibabaAdapter) readDeepDetail(ctx context.Context, request provider.NativeRequest, spec deepDetailSpec) (provider.Page, error) {
@@ -198,7 +230,7 @@ func (a *alibabaAdapter) alibabaACKDetailRow(detail alibabaACKDetailResponse, ac
 	row := newDeepDetailRow(a.Provider(), a.name, detail.ClusterID, detail.Name, "cs", "ALIYUN::CS::Cluster", "kubernetes", "cluster", region, account)
 	row["zone"] = detail.ZoneID
 	row["state"] = strings.ToLower(detail.State)
-	row["tags"] = stringTags(detail.Tags)
+	row["tags"] = stringTags(map[string]string(detail.Tags))
 	setDetailTime(row, "created_at", detail.Created, time.RFC3339, time.RFC3339Nano)
 	setDetailTime(row, "updated_at", detail.Updated, time.RFC3339, time.RFC3339Nano)
 	attributes := row["attributes"].(map[string]any)

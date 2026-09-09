@@ -147,7 +147,7 @@ func (a *alibabaAdapter) search(ctx context.Context, view string, filters map[st
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	request := aliresource.CreateSearchResourcesRequest()
+	request := newAlibabaSearchResourcesRequest()
 	if deadline, ok := ctx.Deadline(); ok {
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
@@ -190,6 +190,8 @@ func (a *alibabaAdapter) search(ctx context.Context, view string, filters map[st
 		row["tags"] = tags
 		attrs := row["attributes"].(map[string]any)
 		attrs["ip_addresses"] = resource.IpAddresses
+		native := row["native"].(map[string]any)
+		native["resource_type"] = resource.ResourceType
 		if parsed, err := time.Parse(time.RFC3339, resource.CreateTime); err == nil {
 			row["created_at"] = parsed.UTC().Format(time.RFC3339Nano)
 		}
@@ -200,6 +202,14 @@ func (a *alibabaAdapter) search(ctx context.Context, view string, filters map[st
 	}
 	return provider.Page{Rows: rows, NextToken: response.NextToken, Scanned: len(rows), Requests: 1}, nil
 }
+
+func newAlibabaSearchResourcesRequest() *aliresource.SearchResourcesRequest {
+	request := aliresource.CreateSearchResourcesRequest()
+	// Resource Center is global. Avoid the SDK's invalid regional TLS endpoint.
+	request.SetDomain("resourcecenter.aliyuncs.com")
+	return request
+}
+
 func alibabaService(resourceType string) string {
 	parts := strings.Split(resourceType, "::")
 	if len(parts) >= 2 {
