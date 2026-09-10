@@ -228,3 +228,5 @@ Network (`QCE/NAT_GATEWAY`, `QCE/LB_PUBLIC`, `QCE/LB_PRIVATE`) and COS (`QCE/COS
 - COS: `QCE/COS::StdStorage?bucket=example-12345&appid=12345` (MB, minimum 5-minute period), `TotalRequestsPs` (count/s).
 
 Live verification in a Jakarta test account covered these direct reads, non-empty pagination, negative parameter/scope checks, and fixed-window metric timestamp/value comparison. This is not console reconciliation, a claim that every metric is available, or confirmation of billing currency/visibility. No cloud resources were modified.
+
+Tencent EIP bandwidth uses QCE/LB::VipIntraffic?eip=IP_ADDRESS and VipOuttraffic (Mbps), with provider-default Values. Unlike CLB, the eip dimension requires an address, not an eip- resource ID; selectors and full metric rows therefore contain this address. Project timestamp/value/unit/native fields when address output is unnecessary.
