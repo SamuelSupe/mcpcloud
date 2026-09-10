@@ -228,3 +228,10 @@ Network (`QCE/NAT_GATEWAY`, `QCE/LB_PUBLIC`, `QCE/LB_PRIVATE`) and COS (`QCE/COS
 - COS: `QCE/COS::StdStorage?bucket=example-12345&appid=12345` (MB, minimum 5-minute period), `TotalRequestsPs` (count/s).
 
 Live verification in a Jakarta test account covered these direct reads, non-empty pagination, negative parameter/scope checks, and fixed-window metric timestamp/value comparison. This is not console reconciliation, a claim that every metric is available, or confirmation of billing currency/visibility. No cloud resources were modified.
+
+### PolarDB fixed cluster detail
+
+`alibaba.polardb.describe_db_cluster_attribute` accepts only `params.db_cluster_id`, requires exactly one configured account and an exact allowed top-level region, and calls PolarDB `DescribeDBClusterAttribute`. The response cluster ID and region must match. The normalized database row includes engine/version, billing mode and a `nodes` list containing node ID, role, state and instance class. Blank/duplicate node IDs and conflicting node regions are rejected. Connection configuration and raw API fields are excluded; cursors and arbitrary parameters are rejected.
+
+For PolarDB PostgreSQL, tested CloudMonitor selectors use `acs_polardb::pg_cpu_total?userId=ACCOUNT_ID&clusterId=CLUSTER_ID&instanceId=NODE_ID` and `pg_mem_usage` with the same dimensions. Both are percentages; `instanceId` is the database node ID, not the cluster ID. Other engine variants require their own metric catalog.
+

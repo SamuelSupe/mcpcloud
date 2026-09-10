@@ -122,6 +122,9 @@ func (a *alibabaAdapter) readDeepDetail(ctx context.Context, request provider.Na
 	if spec.operation == alibabaACKMonitoringOperation {
 		return a.alibabaACKMonitoring(ctx, spec, request, account, region)
 	}
+	if spec.operation == alibabaPolarDBDetailOperation {
+		return a.alibabaPolarDBDetail(ctx, spec, request, account, region)
+	}
 	if spec.kind == "cache" {
 		return a.alibabaRedisDetail(ctx, spec, request, account, region)
 	}
