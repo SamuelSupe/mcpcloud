@@ -16,7 +16,7 @@ import (
 const (
 	alibabaResourcesOperation = "alibaba.resourcecenter.search_resources"
 	alibabaMetricsOperation   = "alibaba.cms.describe_metric_list"
-	alibabaCostsOperation     = "alibaba.bssopenapi.query_bill"
+	alibabaCostsOperation     = "alibaba.bssopenapi.query_instance_bill"
 )
 
 type alibabaAdapter struct {
