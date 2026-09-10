@@ -135,20 +135,16 @@ func (a *alibabaAdapter) queryCosts(ctx context.Context, req provider.QueryReque
 	if limit <= 0 || limit > 300 {
 		limit = 300
 	}
-	request := bssopenapi.CreateQueryBillRequest()
+	request, err := newAlibabaQueryBillRequest(req.Accounts)
+	if err != nil {
+		return provider.Page{}, err
+	}
 	setAlibabaTimeout(ctx, request.RpcRequest)
 	request.BillingCycle = month.Format("2006-01")
 	request.PageNum = requests.NewInteger(pageNumber)
 	request.PageSize = requests.NewInteger(limit)
 	request.IsHideZeroCharge = requests.NewBoolean(false)
 	request.IsDisplayLocalCurrency = requests.NewBoolean(true)
-	if len(req.Accounts) == 1 {
-		owner, err := strconv.ParseInt(req.Accounts[0], 10, 64)
-		if err != nil {
-			return provider.Page{}, &provider.Error{Code: "invalid_scope", Operation: alibabaCostsOperation, Message: "Alibaba account scope must be numeric"}
-		}
-		request.OwnerId = requests.NewInteger(int(owner))
-	}
 	response, err := client.QueryBill(request)
 	if err != nil {
 		return provider.Page{}, alibabaSourceError(alibabaCostsOperation, err)
@@ -306,4 +302,17 @@ func alibabaBillDate(values ...any) (string, time.Time) {
 	}
 	month, _ := values[len(values)-1].(time.Time)
 	return month.Format("2006-01-02"), month
+}
+
+// BillOwnerId filters the resource owner; OwnerId overrides the caller context.
+func newAlibabaQueryBillRequest(accounts []string) (*bssopenapi.QueryBillRequest, error) {
+	request := bssopenapi.CreateQueryBillRequest()
+	if len(accounts) == 1 {
+		owner, err := strconv.ParseInt(accounts[0], 10, 64)
+		if err != nil {
+			return nil, &provider.Error{Code: "invalid_scope", Operation: alibabaCostsOperation, Message: "Alibaba account scope must be numeric"}
+		}
+		request.BillOwnerId = requests.Integer(strconv.FormatInt(owner, 10))
+	}
+	return request, nil
 }
