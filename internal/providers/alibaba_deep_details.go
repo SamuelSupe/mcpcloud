@@ -108,6 +108,9 @@ func (tags *alibabaACKTags) UnmarshalJSON(data []byte) error {
 }
 
 func (a *alibabaAdapter) readDeepDetail(ctx context.Context, request provider.NativeRequest, spec deepDetailSpec) (provider.Page, error) {
+	if err := ctx.Err(); err != nil {
+		return provider.Page{}, err
+	}
 	if err := validateDeepDetailRequest(spec, request); err != nil {
 		return provider.Page{}, err
 	}
@@ -144,8 +147,14 @@ func (a *alibabaAdapter) readDeepDetail(ctx context.Context, request provider.Na
 		if err != nil {
 			return provider.Page{}, alibabaDeepError(spec.operation, err)
 		}
+		if err := ctx.Err(); err != nil {
+			return provider.Page{Requests: 1}, err
+		}
+		if response == nil {
+			return provider.Page{Requests: 1}, deepNotFound(spec.operation, spec.kind)
+		}
 		for _, instance := range response.Items.DBInstanceAttribute {
-			if instance.DBInstanceId == id {
+			if instance.DBInstanceId == id && instance.RegionId == region {
 				return oneDeepDetailPage(a.alibabaRDSDetailRow(instance, account)), nil
 			}
 		}
@@ -166,14 +175,17 @@ func (a *alibabaAdapter) readDeepDetail(ctx context.Context, request provider.Na
 	if err != nil {
 		return provider.Page{}, alibabaDeepError(spec.operation, err)
 	}
+	if err := ctx.Err(); err != nil {
+		return provider.Page{Requests: 1}, err
+	}
 	if response == nil || response.BaseResponse == nil {
 		return provider.Page{Requests: 1}, deepNotFound(spec.operation, spec.kind)
 	}
 	var detail alibabaACKDetailResponse
 	if err := json.Unmarshal(response.GetHttpContentBytes(), &detail); err != nil {
-		return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: spec.operation, Message: err.Error()}
+		return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: spec.operation, Message: "ACK cluster detail response is invalid"}
 	}
-	if detail.ClusterID == "" {
+	if detail.ClusterID != id || detail.RegionID != region {
 		return provider.Page{Requests: 1}, deepNotFound(spec.operation, spec.kind)
 	}
 	return oneDeepDetailPage(a.alibabaACKDetailRow(detail, account, region)), nil
