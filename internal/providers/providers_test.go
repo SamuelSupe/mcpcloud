@@ -1289,6 +1289,9 @@ func TestDeepDetailCatalogRegistersClosedOperationsAndCapabilities(t *testing.T)
 	for _, adapter := range nativeProductTestAdapters() {
 		specs := deepDetailCatalog[adapter.Provider()]
 		want := 2
+		if adapter.Provider() == model.ProviderAlibaba {
+			want = 3
+		}
 		if adapter.Provider() == model.ProviderVolcengine {
 			want = 4
 		}
@@ -1335,7 +1338,7 @@ func TestDeepDetailCatalogRegistersClosedOperationsAndCapabilities(t *testing.T)
 			}
 		}
 	}
-	want := len(model.Providers)*2 + 2
+	want := len(model.Providers)*2 + 3
 	if len(seen) != want {
 		t.Fatalf("deep detail operation count = %d, want %d", len(seen), want)
 	}
