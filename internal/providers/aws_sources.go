@@ -99,7 +99,7 @@ func (a *awsAdapter) queryMetrics(ctx context.Context, req provider.QueryRequest
 		}
 		for i := 0; i < len(result.Timestamps) && i < len(result.Values); i++ {
 			resourceID := firstDimension(selector.Dimensions)
-			row := metricRow(model.ProviderAWS, a.name, selector.Raw, "cloudwatch", resourceID, region, account, result.Timestamps[i], result.Values[i], "", selector.Dimensions)
+			row := metricRow(model.ProviderAWS, a.name, selector.Raw, "cloudwatch", resourceID, region, account, result.Timestamps[i], result.Values[i], awsMetricUnit(selector.Parts[0], selector.Parts[1]), selector.Dimensions)
 			native := row["native"].(map[string]any)
 			native["namespace"] = selector.Parts[0]
 			native["metric_name"] = selector.Parts[1]
@@ -114,12 +114,33 @@ func (a *awsAdapter) queryMetrics(ctx context.Context, req provider.QueryRequest
 	return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}, nil
 }
 
+func awsMetricUnit(namespace, metric string) string {
+	switch namespace {
+	case "AWS/EC2", "AWS/RDS", "AWS/ElastiCache", "ContainerInsights":
+		switch metric {
+		case "CPUUtilization", "DatabaseConnectionsUsage", "DiskQueueDepth", "FreeableMemoryPercent", "MemoryUtilization", "StorageSpaceUtilization":
+			return "%"
+		case "FreeableMemory", "FreeStorageSpace", "NetworkIn", "NetworkOut", "DiskReadBytes", "DiskWriteBytes":
+			return "Bytes"
+		case "NetworkReceiveThroughput", "NetworkTransmitThroughput", "ReadThroughput", "WriteThroughput":
+			return "Bytes/Second"
+		case "ReadIOPS", "WriteIOPS":
+			return "Count/Second"
+		case "DatabaseConnections", "DiskReadOps", "DiskWriteOps", "NetworkPacketsIn", "NetworkPacketsOut", "StatusCheckFailed", "StatusCheckFailed_Instance", "StatusCheckFailed_System":
+			return "Count"
+		case "ReadLatency", "WriteLatency":
+			return "Seconds"
+		}
+	}
+	return ""
+}
+
 func (a *awsAdapter) queryCosts(ctx context.Context, req provider.QueryRequest) (provider.Page, error) {
 	start, end, err := rangeRequired(req, awsCostsOperation)
 	if err != nil {
 		return provider.Page{}, err
 	}
-	cfg, err := a.sdkConfig(ctx, "us-east-1", awsCostsOperation)
+	cfg, err := a.sdkConfig(ctx, awsCostExplorerRegion(a.profile.Regions), awsCostsOperation)
 	if err != nil {
 		return provider.Page{}, err
 	}
@@ -174,6 +195,16 @@ func (a *awsAdapter) queryCosts(ctx context.Context, req provider.QueryRequest) 
 		next = *output.NextPageToken
 	}
 	return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}, nil
+}
+
+func awsCostExplorerRegion(regions []string) string {
+	for _, region := range regions {
+		if strings.HasPrefix(region, "cn-") {
+			// Cost Explorer for the aws-cn partition uses the Ningxia endpoint.
+			return "cn-northwest-1"
+		}
+	}
+	return "us-east-1"
 }
 
 func awsSourceError(operation string, err error) error {
