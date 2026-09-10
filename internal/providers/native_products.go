@@ -17,6 +17,36 @@ type nativeProductSpec struct {
 }
 
 var nativeProductTypeOverrides = map[string]map[string]struct{}{
+	"alibaba.compute.list_instances": {"ACS::ECS::Instance": {}},
+	"alibaba.compute.list_disks":     {"ACS::ECS::Disk": {}},
+	"alibaba.storage.list_buckets":   {"ACS::OSS::Bucket": {}},
+	"alibaba.network.list_resources": {
+		"ACS::ALB::LoadBalancer":  {},
+		"ACS::ECS::SecurityGroup": {},
+		"ACS::EIP::EipAddress":    {},
+		"ACS::NAT::NatGateway":    {},
+		"ACS::NLB::LoadBalancer":  {},
+		"ACS::SLB::LoadBalancer":  {},
+		"ACS::VPC::VPC":           {},
+		"ACS::VPC::VSwitch":       {},
+	},
+	"alibaba.iam.list_resources": {
+		"ACS::RAM::Group":  {},
+		"ACS::RAM::Policy": {},
+		"ACS::RAM::Role":   {},
+		"ACS::RAM::User":   {},
+	},
+	"alibaba.database.list_resources": {
+		"ACS::PolarDB::DBCluster": {},
+		"ACS::RDS::DBInstance":    {},
+		"ACS::Redis::DBInstance":  {},
+	},
+	"alibaba.kubernetes.list_resources": {"ACS::ACK::Cluster": {}},
+	"alibaba.monitoring.list_alarms":    {"ACS::CMS::Alarm": {}},
+	"alibaba.logging.list_resources": {
+		"ACS::SLS::LogStore": {},
+		"ACS::SLS::Project":  {},
+	},
 	"volcengine.compute.list_instances": {"Volcengine::ECS::Instance": {}},
 	"volcengine.compute.list_disks":     {"Volcengine::StorageEBS::Volume": {}},
 	"volcengine.storage.list_buckets":   {"Volcengine::TOS::Bucket": {}},
