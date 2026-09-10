@@ -65,7 +65,9 @@ func (a *awsAdapter) awsInstanceDetailRow(instance types.Instance, region, accou
 	}
 	row := newInstanceDetailRow(a.Provider(), a.name, id, name, "ec2", "AWS::EC2::Instance", region, account)
 	row["tags"] = tags
-	row["state"] = string(instance.State.Name)
+	if instance.State != nil {
+		row["state"] = string(instance.State.Name)
+	}
 	if instance.Placement != nil {
 		row["zone"] = awsbase.ToString(instance.Placement.AvailabilityZone)
 	}

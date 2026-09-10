@@ -62,6 +62,7 @@ func (a *awsAdapter) Operations() []provider.Operation {
 	})}
 	operations = append(operations, nativeProductOperations(model.ProviderAWS, "resourceexplorer2")...)
 	operations = append(operations, instanceDetailOperations(model.ProviderAWS)...)
+	operations = append(operations, awsDirectOperations()...)
 	return append(operations, deepDetailOperations(model.ProviderAWS)...)
 }
 func (a *awsAdapter) Readiness(context.Context) model.ProfileStatus {
@@ -105,6 +106,11 @@ func (a *awsAdapter) Query(ctx context.Context, req provider.QueryRequest) (prov
 }
 
 func (a *awsAdapter) NativeRead(ctx context.Context, req provider.NativeRequest) (provider.Page, error) {
+	for _, op := range awsDirectOperations() {
+		if req.Operation == op.Name {
+			return a.readDirectInventory(ctx, req, op)
+		}
+	}
 	if detail, ok := instanceDetailFor(model.ProviderAWS, req.Operation); ok {
 		return a.describeInstance(ctx, req, detail)
 	}

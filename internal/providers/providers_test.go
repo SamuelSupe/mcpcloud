@@ -83,7 +83,7 @@ func TestAWSNativeReadAllowsOnlyRegisteredOperationAndStopsAtCredentialBoundary(
 func TestAWSMetadataExposesOnlyReadOnlyInventoryOperation(t *testing.T) {
 	adapter := &awsAdapter{name: "aws-prod", profile: config.Profile{Provider: model.ProviderAWS}}
 	operations := adapter.Operations()
-	if len(operations) != len(nativeProductCatalog)+4 || operations[0].Name != awsInventoryOperation {
+	if len(operations) != len(nativeProductCatalog)+4+len(awsDirectOperations()) || operations[0].Name != awsInventoryOperation {
 		t.Fatalf("Operations() = %#v, want inventory plus %d product operations", operations, len(nativeProductCatalog))
 	}
 	assertNativeProductNames(t, adapter, operations)
