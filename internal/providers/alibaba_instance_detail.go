@@ -32,6 +32,9 @@ var newAlibabaECSDetailClient = func(profile config.Profile, region string) (ali
 }
 
 func (a *alibabaAdapter) describeInstanceAttribute(ctx context.Context, request provider.NativeRequest, spec instanceDetailSpec) (provider.Page, error) {
+	if err := ctx.Err(); err != nil {
+		return provider.Page{}, err
+	}
 	if err := validateInstanceDetailRequest(spec, request); err != nil {
 		return provider.Page{}, err
 	}
@@ -68,7 +71,7 @@ func (a *alibabaAdapter) describeInstanceAttribute(ctx context.Context, request 
 	if err := ctx.Err(); err != nil {
 		return provider.Page{}, err
 	}
-	if response == nil || response.InstanceId == "" {
+	if response == nil || response.InstanceId != instanceID || response.RegionId != region {
 		return provider.Page{Requests: 1}, &provider.Error{Code: "not_found", Operation: spec.operation, Message: "ECS instance was not returned"}
 	}
 	return provider.Page{Rows: []map[string]any{a.alibabaInstanceDetailRow(response, account)}, Scanned: 1, Requests: 1}, nil
