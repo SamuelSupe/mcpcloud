@@ -59,6 +59,7 @@ func (a *tencentAdapter) Operations() []provider.Operation {
 	operations = append(operations, tencentNodesOperation())
 	operations = append(operations, tencentRedisOperation())
 	operations = append(operations, tencentVPCOperations()...)
+	operations = append(operations, tencentVPCListOperations()...)
 	operations = append(operations, tencentCLBOperation(), tencentListenersOperation(), tencentCLBListOperation())
 	operations = append(operations, tencentTargetOperations()...)
 	operations = append(operations, tencentNATRuleOperations()...)
@@ -92,6 +93,9 @@ func (a *tencentAdapter) Query(ctx context.Context, req provider.QueryRequest) (
 	return page, err
 }
 func (a *tencentAdapter) NativeRead(ctx context.Context, req provider.NativeRequest) (provider.Page, error) {
+	if req.Operation == tencentAddressListOperation || req.Operation == tencentNATListOperation {
+		return a.readVPCList(ctx, req)
+	}
 	if req.Operation == tencentCLBListOperationName {
 		return a.readCLBList(ctx, req)
 	}
