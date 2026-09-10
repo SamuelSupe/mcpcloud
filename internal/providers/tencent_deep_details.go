@@ -34,7 +34,7 @@ type tencentCDBDetailResponse struct {
 		Items []struct {
 			InstanceID    string `json:"InstanceId"`
 			InstanceName  string `json:"InstanceName"`
-			Status        int    `json:"Status"`
+			Status        *int   `json:"Status"`
 			StatusName    string `json:"StatusName"`
 			Region        string `json:"Region"`
 			Zone          string `json:"Zone"`
@@ -56,8 +56,8 @@ type tencentCDBDetailResponse struct {
 				RoGroupID string `json:"RoGroupId"`
 			} `json:"RoGroups"`
 			TagList []struct {
-				Key   string `json:"Key"`
-				Value string `json:"Value"`
+				Key   string `json:"TagKey"`
+				Value string `json:"TagValue"`
 			} `json:"TagList"`
 		} `json:"Items"`
 		Error *struct {
@@ -77,15 +77,18 @@ type tencentTKEDetailResponse struct {
 			ClusterStatus          string `json:"ClusterStatus"`
 			ClusterVersion         string `json:"ClusterVersion"`
 			ClusterLevel           string `json:"ClusterLevel"`
+			ClusterNodeNum         *int   `json:"ClusterNodeNum"`
 			CreatedTime            string `json:"CreatedTime"`
 			VpcID                  string `json:"VpcId"`
 			ProjectID              int64  `json:"ProjectId"`
 			DeletionProtection     bool   `json:"DeletionProtection"`
 			ClusterNetworkSettings struct {
-				ClusterCIDR               string `json:"ClusterCIDR"`
-				ServiceCIDR               string `json:"ServiceCIDR"`
-				Cni                       bool   `json:"Cni"`
-				IgnoreClusterCIDRConflict bool   `json:"IgnoreClusterCIDRConflict"`
+				VpcID                     string   `json:"VpcId"`
+				Subnets                   []string `json:"Subnets"`
+				ClusterCIDR               string   `json:"ClusterCIDR"`
+				ServiceCIDR               string   `json:"ServiceCIDR"`
+				Cni                       bool     `json:"Cni"`
+				IgnoreClusterCIDRConflict bool     `json:"IgnoreClusterCIDRConflict"`
 			} `json:"ClusterNetworkSettings"`
 			TagSpecification []struct {
 				Tags []struct {
@@ -190,7 +193,7 @@ func tencentEnvelopeError(operation string, value *struct {
 func (a *tencentAdapter) tencentCDBDetailRow(detail struct {
 	InstanceID    string `json:"InstanceId"`
 	InstanceName  string `json:"InstanceName"`
-	Status        int    `json:"Status"`
+	Status        *int   `json:"Status"`
 	StatusName    string `json:"StatusName"`
 	Region        string `json:"Region"`
 	Zone          string `json:"Zone"`
@@ -212,8 +215,8 @@ func (a *tencentAdapter) tencentCDBDetailRow(detail struct {
 		RoGroupID string `json:"RoGroupId"`
 	} `json:"RoGroups"`
 	TagList []struct {
-		Key   string `json:"Key"`
-		Value string `json:"Value"`
+		Key   string `json:"TagKey"`
+		Value string `json:"TagValue"`
 	} `json:"TagList"`
 }, fallbackRegion, account string) map[string]any {
 	region := detail.Region
@@ -223,10 +226,23 @@ func (a *tencentAdapter) tencentCDBDetailRow(detail struct {
 	row := newDeepDetailRow(a.Provider(), a.name, detail.InstanceID, detail.InstanceName, "cdb", "QCS::CDB::Instance", "database", "database", region, account)
 	row["zone"] = detail.Zone
 	row["state"] = strings.ToLower(detail.StatusName)
+	if detail.Status != nil {
+		row["native"].(map[string]any)["status_code"] = *detail.Status
+		if row["state"] == "" {
+			states := map[int]string{0: "creating", 1: "running", 4: "isolating", 5: "isolated"}
+			state, ok := states[*detail.Status]
+			if !ok {
+				state = "unknown"
+			}
+			row["state"] = state
+		}
+	}
 	setDetailTime(row, "created_at", detail.CreateTime, time.RFC3339, time.RFC3339Nano)
 	tags := map[string]any{}
 	for _, tag := range detail.TagList {
-		tags[tag.Key] = tag.Value
+		if tag.Key != "" {
+			tags[tag.Key] = tag.Value
+		}
 	}
 	row["tags"] = tags
 	attributes := row["attributes"].(map[string]any)
@@ -259,15 +275,18 @@ func (a *tencentAdapter) tencentTKEDetailRow(detail struct {
 	ClusterStatus          string `json:"ClusterStatus"`
 	ClusterVersion         string `json:"ClusterVersion"`
 	ClusterLevel           string `json:"ClusterLevel"`
+	ClusterNodeNum         *int   `json:"ClusterNodeNum"`
 	CreatedTime            string `json:"CreatedTime"`
 	VpcID                  string `json:"VpcId"`
 	ProjectID              int64  `json:"ProjectId"`
 	DeletionProtection     bool   `json:"DeletionProtection"`
 	ClusterNetworkSettings struct {
-		ClusterCIDR               string `json:"ClusterCIDR"`
-		ServiceCIDR               string `json:"ServiceCIDR"`
-		Cni                       bool   `json:"Cni"`
-		IgnoreClusterCIDRConflict bool   `json:"IgnoreClusterCIDRConflict"`
+		VpcID                     string   `json:"VpcId"`
+		Subnets                   []string `json:"Subnets"`
+		ClusterCIDR               string   `json:"ClusterCIDR"`
+		ServiceCIDR               string   `json:"ServiceCIDR"`
+		Cni                       bool     `json:"Cni"`
+		IgnoreClusterCIDRConflict bool     `json:"IgnoreClusterCIDRConflict"`
 	} `json:"ClusterNetworkSettings"`
 	TagSpecification []struct {
 		Tags []struct {
@@ -282,7 +301,9 @@ func (a *tencentAdapter) tencentTKEDetailRow(detail struct {
 	tags := map[string]any{}
 	for _, specification := range detail.TagSpecification {
 		for _, tag := range specification.Tags {
-			tags[tag.Key] = tag.Value
+			if tag.Key != "" {
+				tags[tag.Key] = tag.Value
+			}
 		}
 	}
 	row["tags"] = tags
@@ -291,6 +312,13 @@ func (a *tencentAdapter) tencentTKEDetailRow(detail struct {
 	attributes["cluster_type"] = detail.ClusterType
 	attributes["instance_type"] = detail.ClusterLevel
 	attributes["vpc_id"] = detail.VpcID
+	if detail.ClusterNetworkSettings.VpcID != "" {
+		attributes["vpc_id"] = detail.ClusterNetworkSettings.VpcID
+	}
+	if detail.ClusterNodeNum != nil {
+		attributes["node_count"] = *detail.ClusterNodeNum
+	}
+	setRelated(row, "subnet_ids", detail.ClusterNetworkSettings.Subnets)
 	attributes["pod_cidr"] = detail.ClusterNetworkSettings.ClusterCIDR
 	attributes["service_cidr"] = detail.ClusterNetworkSettings.ServiceCIDR
 	if detail.ClusterNetworkSettings.Cni {
