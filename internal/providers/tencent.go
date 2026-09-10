@@ -56,6 +56,13 @@ func (a *tencentAdapter) Operations() []provider.Operation {
 	operations := []provider.Operation{operation(tencentResourcesOperation, model.ProviderTencent, "cloudrc", "Search Tencent Cloud Resource Center", map[string]any{"view_id": map[string]any{"type": "string"}, "resource_type": map[string]any{"type": "string"}, "resource_id": map[string]any{"type": "string"}, "resource_alias": map[string]any{"type": "string"}, "region": map[string]any{"type": "string"}, "zone": map[string]any{"type": "string"}, "vpc_id": map[string]any{"type": "string"}, "subnet_id": map[string]any{"type": "string"}})}
 	operations = append(operations, nativeProductOperations(model.ProviderTencent, "cloudrc")...)
 	operations = append(operations, instanceDetailOperations(model.ProviderTencent)...)
+	operations = append(operations, tencentNodesOperation())
+	operations = append(operations, tencentRedisOperation())
+	operations = append(operations, tencentVPCOperations()...)
+	operations = append(operations, tencentCLBOperation(), tencentListenersOperation())
+	operations = append(operations, tencentTargetOperations()...)
+	operations = append(operations, tencentNATRuleOperations()...)
+	operations = append(operations, tencentCOSConfigOperation())
 	return append(operations, deepDetailOperations(model.ProviderTencent)...)
 }
 func (a *tencentAdapter) Readiness(context.Context) model.ProfileStatus {
@@ -85,6 +92,30 @@ func (a *tencentAdapter) Query(ctx context.Context, req provider.QueryRequest) (
 	return page, err
 }
 func (a *tencentAdapter) NativeRead(ctx context.Context, req provider.NativeRequest) (provider.Page, error) {
+	if req.Operation == tencentCOSOperation {
+		return a.readCOSConfig(ctx, req)
+	}
+	if req.Operation == tencentSNATOperation || req.Operation == tencentDNATOperation {
+		return a.readNATRules(ctx, req)
+	}
+	if req.Operation == tencentTargetsOperationName || req.Operation == tencentTargetHealthOperationName {
+		return a.readCLBTargets(ctx, req)
+	}
+	if req.Operation == tencentListenersOperationName {
+		return a.readCLBListeners(ctx, req, tencentCLBSpec)
+	}
+	if req.Operation == tencentCLBOperationName {
+		return a.readCLBDetail(ctx, req, tencentCLBSpec)
+	}
+	if spec, ok := tencentVPCSpecs[req.Operation]; ok {
+		return a.readVPCDetail(ctx, req, spec)
+	}
+	if req.Operation == tencentRedisOperationName {
+		return a.readRedisDetail(ctx, req)
+	}
+	if req.Operation == tencentNodesOperationName {
+		return a.readClusterNodes(ctx, req)
+	}
 	if detail, ok := instanceDetailFor(model.ProviderTencent, req.Operation); ok {
 		return a.describeCVMInstance(ctx, req, detail)
 	}
