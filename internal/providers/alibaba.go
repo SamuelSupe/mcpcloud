@@ -180,6 +180,7 @@ func (a *alibabaAdapter) search(ctx context.Context, view string, filters map[st
 	for _, resource := range response.Resources {
 		service := alibabaService(resource.ResourceType)
 		row := baseRow(model.ProviderAlibaba, a.name, resource.ResourceId, resource.ResourceName, service, resource.ResourceType, resource.RegionId, resource.AccountId, now)
+		row["domain"], row["kind"] = classifyAlibabaInventory(resource.ResourceType)
 		row["zone"] = resource.ZoneId
 		scope := row["scope"].(map[string]any)
 		scope["resource_group_id"] = resource.ResourceGroupId
