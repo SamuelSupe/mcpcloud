@@ -35,6 +35,9 @@ var deepDetailCatalog = map[model.Provider][]deepDetailSpec{
 	model.ProviderAlibaba: {
 		{operation: "alibaba.rds.describe_db_instance_attribute", service: "rds", domain: "database", kind: "database", description: "Get one Alibaba Cloud RDS instance", parameters: detailParameters("db_instance_id"), required: []string{"db_instance_id"}},
 		{operation: "alibaba.cs.describe_cluster_detail", service: "cs", domain: "kubernetes", kind: "cluster", description: "Get one ACK cluster", parameters: detailParameters("cluster_id"), required: []string{"cluster_id"}},
+		{operation: "alibaba.redis.describe_instance_attribute", service: "redis", domain: "database", kind: "cache", description: "Get one Alibaba Redis instance without connection or configuration secrets", parameters: detailParameters("instance_id"), required: []string{"instance_id"}},
+		{operation: alibabaACKMonitoringOperation, service: "cs", domain: "kubernetes", kind: "cluster", description: "Get ACK metrics-server metadata and explicit CloudMonitor collection setting", parameters: detailParameters("cluster_id"), required: []string{"cluster_id"}},
+		{operation: alibabaPolarDBDetailOperation, service: "polardb", domain: "database", kind: "database", description: "Get one PolarDB cluster and safe node metadata", parameters: detailParameters("db_cluster_id"), required: []string{"db_cluster_id"}},
 	},
 	model.ProviderHuawei: {
 		{operation: "huawei.rds.list_instances", service: "rds", domain: "database", kind: "database", description: "Get one Huawei Cloud RDS instance using the ID-filtered ListInstances API", parameters: detailParameters("project_id", "instance_id"), required: []string{"project_id", "instance_id"}},

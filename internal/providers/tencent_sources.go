@@ -76,6 +76,9 @@ func (a *tencentAdapter) queryMetrics(ctx context.Context, req provider.QueryReq
 		"EndTime":           pageEnd.Format("2006-01-02T15:04:05-07:00"),
 		"SpecifyStatistics": int64(1),
 	}
+	if tencentDefaultStatisticMetric(selector.Parts[0]) {
+		delete(params, "SpecifyStatistics")
+	}
 	request := tchttp.NewCommonRequest("monitor", "2018-07-24", "GetMonitorData")
 	request.SetContext(ctx)
 	if err := request.SetActionParameters(params); err != nil {
@@ -116,18 +119,26 @@ func (a *tencentAdapter) queryMetrics(ctx context.Context, req provider.QueryReq
 			dimensionValues[dimension.Name] = dimension.Value
 		}
 		values := series.AvgValues
-		if len(values) == 0 {
+		if tencentDefaultStatisticMetric(selector.Parts[0]) || len(values) == 0 {
 			values = series.Values
 		}
 		for index, timestamp := range series.Timestamps {
+			// GetMonitorData can include the end instant; our windows are [start,end).
+			instant := time.Unix(int64(timestamp), 0)
+			if instant.Before(pageStart) || !instant.Before(pageEnd) {
+				continue
+			}
 			if index >= len(values) {
 				break
 			}
-			row := metricRow(model.ProviderTencent, a.name, selector.Raw, "monitor", firstDimension(dimensionValues), region, account, time.Unix(int64(timestamp), 0), values[index], "", dimensionValues)
+			row := metricRow(model.ProviderTencent, a.name, selector.Raw, "monitor", firstDimension(dimensionValues), region, account, time.Unix(int64(timestamp), 0), values[index], tencentMetricUnit(selector.Parts[0], selector.Parts[1]), dimensionValues)
 			native := row["native"].(map[string]any)
 			native["namespace"] = selector.Parts[0]
 			native["metric_name"] = selector.Parts[1]
 			native["statistic"] = "Average"
+			if tencentDefaultStatisticMetric(selector.Parts[0]) {
+				native["statistic"] = "ProviderDefault"
+			}
 			rows = append(rows, row)
 		}
 	}
@@ -136,6 +147,65 @@ func (a *tencentAdapter) queryMetrics(ctx context.Context, req provider.QueryReq
 		next = encodePeriodCursor(periodCursor{Offset: int(pageEnd.Unix())})
 	}
 	return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}, nil
+}
+
+// Units for the verified CVM metrics, without changing the provider values.
+// https://cloud.tencent.com/document/product/248/6843
+// Unknown metrics remain unspecified rather than receiving a guessed unit.
+func tencentDefaultStatisticMetric(namespace string) bool {
+	return namespace == "QCE/LB" || namespace == "QCE/COS" || namespace == "QCE/NAT_GATEWAY" || (namespace == "QCE/LB_PUBLIC" || namespace == "QCE/LB_PRIVATE")
+}
+func tencentMetricUnit(namespace, metric string) string {
+	// EIP reference: /document/product/248/45099.
+	if namespace == "QCE/LB" && (metric == "VipIntraffic" || metric == "VipOuttraffic") {
+		return "Mbps"
+	}
+	// COS reference: /document/product/248/45140.
+	if namespace == "QCE/COS" {
+		switch metric {
+		case "TotalRequestsPs":
+			return "count/s"
+		case "StdStorage":
+			return "MB"
+		}
+	}
+	if namespace == "QCE/NAT_GATEWAY" {
+		switch metric {
+		case "WanInDropPkg", "WanOutDropPkg":
+			return "pps"
+		case "Conns":
+			return "count"
+		}
+	}
+	if (namespace == "QCE/LB_PUBLIC" || namespace == "QCE/LB_PRIVATE") && metric == "ClientConnum" {
+		return "count"
+	}
+	// Network references: /document/product/248/45069 and /document/product/248/51898.
+	if namespace == "QCE/NAT_GATEWAY" && (metric == "OutBandwidth" || metric == "InBandwidth") {
+		return "Mbps"
+	}
+	if (namespace == "QCE/LB_PUBLIC" || namespace == "QCE/LB_PRIVATE") && (metric == "OutTraffic" || metric == "InTraffic") {
+		return "Mbps"
+	}
+	// Product metric references: /document/api/248/45147 and /document/product/248/49729.
+	if namespace == "QCE/CDB" && (metric == "CpuUseRate" || metric == "VolumeRate") {
+		return "%"
+	}
+	if namespace == "QCE/REDIS_MEM" && metric == "MemUtil" {
+		return "%"
+	}
+	if namespace != "QCE/CVM" {
+		return ""
+	}
+	switch metric {
+	case "CpuUsage", "CPUUsage", "BaseCpuUsage", "MemUsage", "CvmDiskUsage", "DiskUsage":
+		return "%"
+	case "WanIntraffic", "WanOuttraffic":
+		return "Mbps"
+	case "CpuLoadavg", "Cpuloadavg5m", "Cpuloadavg15m":
+		return "1"
+	}
+	return ""
 }
 
 func (a *tencentAdapter) queryCosts(ctx context.Context, req provider.QueryRequest) (provider.Page, error) {

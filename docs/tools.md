@@ -190,3 +190,51 @@ Example database detail read:
 ## Sensitive-data contract
 
 None of the tools accept credentials as arguments. `cloud_query` and `cloud_native_read` return normalized metadata only. Object bodies, database rows, database endpoints, connection strings, messages, message bodies, log events, kubeconfigs, certificates, tokens, secret values, connection credentials, `user_data`, and Kubernetes API data are outside the contract. Native output is opt-in and restricted to adapter-controlled normalized fields; a complete SDK response must never be returned.
+
+Alibaba Redis fixed detail: `alibaba.redis.describe_instance_attribute` takes only `instance_id`, requires one configured account and an exact allowed region, and calls R-kvstore `DescribeInstanceAttribute` (2015-01-01). It returns one matching cache row with status, engine version, memory capacity in MB, instance class, architecture, node type and billing mode. Connection endpoints, IPs, ports, security-IP lists and raw configuration are not returned. Cursors and arbitrary request parameters are rejected.
+
+### ACK metrics-server collection configuration
+
+`alibaba.cs.get_metrics_server_config` takes only `params.cluster_id`, one configured account, and an exact allowed top-level region. It first verifies cluster ID and region using `DescribeClusterDetail`, then calls `GetClusterAddonInstance` for the fixed `metrics-server` component. The returned cluster row includes `attributes.metrics_server` with name, version, component state and `cloudmonitor_collection` (`enabled`, `disabled`, or `unknown`). Missing, null or unrecognized `CmsEnabled` values stay unknown. This is the registered component configuration, not proof of runtime health or metric availability. Raw configuration and credentials are excluded. No kubeconfig or Kubernetes API access is used by this operation.
+
+ACK CloudMonitor metrics use namespace `acs_k8s`, dimensions `userId` and `cluster`, and metrics `cluster.cpu.utilization` and `cluster.memory.utilization` (percent). For example, use `acs_k8s::cluster.cpu.utilization?userId=ACCOUNT_ID&cluster=CLUSTER_ID` as the metric selector. Empty results are not zero utilization. Legacy `acs_kubernetes` group metrics are a different interface.
+
+## Tencent direct reads and verified metrics
+
+Tencent direct reads below bypass Resource Center inventory. They require one configured account, an exact allowed region, and separate service read permissions. Resource Center still needs activation for unified inventory; billing visibility is independent.
+
+| Operation | Required parameter | Scope |
+| --- | --- | --- |
+| `tencent.tke.describe_cluster_instances` | `cluster_id` | Paginated node metadata |
+| `tencent.redis.describe_instance` | `instance_id` | Redis instance metadata |
+| `tencent.vpc.describe_address` | `address_id` | EIP metadata and binding |
+| `tencent.vpc.describe_nat_gateway` | `nat_gateway_id` | NAT metadata and EIP IDs |
+| `tencent.vpc.describe_snat_rules` | `nat_gateway_id` | Paginated SNAT metadata |
+| `tencent.vpc.describe_dnat_rules` | `nat_gateway_id` | Paginated DNAT protocol and ports |
+| `tencent.clb.describe_load_balancer` | `load_balancer_id` | CLB instance metadata |
+| `tencent.clb.describe_listeners` | `load_balancer_id` | Listener metadata |
+| `tencent.clb.describe_targets` | `load_balancer_id` | Target bindings |
+| `tencent.clb.describe_target_health` | `load_balancer_id` | Binding health observations |
+| `tencent.cos.describe_bucket_config` | `bucket` | ACL public-group flags, versioning and lifecycle counts |
+
+Direct detail output excludes raw addresses, certificates, domains, URLs and embedded rule bodies. COS uses the official COS SDK, validates the ACL owner against the configured account and checks bucket location. It only reads bucket ACL/location/versioning/lifecycle; absence of public ACL grants does not establish that bucket policies or object ACLs are private. Only the explicit lifecycle-not-configured error is treated as missing configuration. Redirects and automatic host switching are disabled.
+
+TKE and NAT use upstream offset pagination; CLB lists are read again and paginated locally. Cursors bind to the applicable scope and, for target and NAT operations, the operation. Pagination is not a consistent snapshot during resource changes. DNAT and address-only target references use a random process key and change on restart; do not persist them as cloud IDs. Function and Polaris targets return an unsupported-type error rather than being silently omitted. A health record represents a binding, not a unique machine or end-to-end service health.
+
+Network (`QCE/NAT_GATEWAY`, `QCE/LB_PUBLIC`, `QCE/LB_PRIVATE`) and COS (`QCE/COS`) metrics use provider-default `Values` and label `native.statistic=ProviderDefault`; other Tencent metric behavior is retained. This avoids forcing averages on sum/max/last metrics. Units are supplied only for explicitly documented metrics. Examples:
+
+- NAT: `QCE/NAT_GATEWAY::InBandwidth?natId=nat-...`, `OutBandwidth` (Mbps), `WanInDropPkg`/`WanOutDropPkg` (pps), `Conns` (count).
+- CLB: `QCE/LB_PUBLIC::InTraffic?loadBalancerId=lb-...`, `OutTraffic` (Mbps), `ClientConnum` (count). Use `QCE/LB_PRIVATE` for internal CLBs.
+- COS: `QCE/COS::StdStorage?bucket=example-12345&appid=12345` (MB, minimum 5-minute period), `TotalRequestsPs` (count/s).
+
+Live verification in a Jakarta test account covered these direct reads, non-empty pagination, negative parameter/scope checks, and fixed-window metric timestamp/value comparison. This is not console reconciliation, a claim that every metric is available, or confirmation of billing currency/visibility. No cloud resources were modified.
+
+Tencent EIP bandwidth uses QCE/LB::VipIntraffic?eip=IP_ADDRESS and VipOuttraffic (Mbps), with provider-default Values. Unlike CLB, the eip dimension requires an address, not an eip- resource ID; selectors and full metric rows therefore contain this address. Project timestamp/value/unit/native fields when address output is unnecessary.
+
+### PolarDB fixed cluster detail
+
+`alibaba.polardb.describe_db_cluster_attribute` accepts only `params.db_cluster_id`, requires exactly one configured account and an exact allowed top-level region, and calls PolarDB `DescribeDBClusterAttribute`. The response cluster ID and region must match. The normalized database row includes engine/version, billing mode and a `nodes` list containing node ID, role, state and instance class. Blank/duplicate node IDs and conflicting node regions are rejected. Connection configuration and raw API fields are excluded; cursors and arbitrary parameters are rejected.
+
+For PolarDB PostgreSQL, tested CloudMonitor selectors use `acs_polardb::pg_cpu_total?userId=ACCOUNT_ID&clusterId=CLUSTER_ID&instanceId=NODE_ID` and `pg_mem_usage` with the same dimensions. Both are percentages; `instanceId` is the database node ID, not the cluster ID. Other engine variants require their own metric catalog.
+
+
