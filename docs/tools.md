@@ -238,3 +238,5 @@ Tencent EIP bandwidth uses QCE/LB::VipIntraffic?eip=IP_ADDRESS and VipOuttraffic
 For PolarDB PostgreSQL, tested CloudMonitor selectors use `acs_polardb::pg_cpu_total?userId=ACCOUNT_ID&clusterId=CLUSTER_ID&instanceId=NODE_ID` and `pg_mem_usage` with the same dimensions. Both are percentages; `instanceId` is the database node ID, not the cluster ID. Other engine variants require their own metric catalog.
 
 
+
+Tencent `tencent.clb.list_load_balancers` lists CLB instances directly through DescribeLoadBalancers, without Cloud Resource Center. Pass one exact configured `region`, an empty `params` object and `page_size` (up to 100); continue using the returned cursor. It requires one configured account and returns the same safe fields as `tencent.clb.describe_load_balancer`. Cursors are scoped to profile/account/region/operation; a changed total returns `inventory_changed` and requires restarting. Offset pagination is not a snapshot: same-count replacements can still cause omissions or duplicates during concurrent changes. This native operation does not replace `resources` queries or the existing Resource Center product list operations.
