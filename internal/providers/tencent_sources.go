@@ -153,9 +153,13 @@ func (a *tencentAdapter) queryMetrics(ctx context.Context, req provider.QueryReq
 // https://cloud.tencent.com/document/product/248/6843
 // Unknown metrics remain unspecified rather than receiving a guessed unit.
 func tencentDefaultStatisticMetric(namespace string) bool {
-	return namespace == "QCE/COS" || namespace == "QCE/NAT_GATEWAY" || (namespace == "QCE/LB_PUBLIC" || namespace == "QCE/LB_PRIVATE")
+	return namespace == "QCE/LB" || namespace == "QCE/COS" || namespace == "QCE/NAT_GATEWAY" || (namespace == "QCE/LB_PUBLIC" || namespace == "QCE/LB_PRIVATE")
 }
 func tencentMetricUnit(namespace, metric string) string {
+	// EIP reference: /document/product/248/45099.
+	if namespace == "QCE/LB" && (metric == "VipIntraffic" || metric == "VipOuttraffic") {
+		return "Mbps"
+	}
 	// COS reference: /document/product/248/45140.
 	if namespace == "QCE/COS" {
 		switch metric {
