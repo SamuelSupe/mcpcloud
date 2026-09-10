@@ -190,3 +190,5 @@ Example database detail read:
 ## Sensitive-data contract
 
 None of the tools accept credentials as arguments. `cloud_query` and `cloud_native_read` return normalized metadata only. Object bodies, database rows, database endpoints, connection strings, messages, message bodies, log events, kubeconfigs, certificates, tokens, secret values, connection credentials, `user_data`, and Kubernetes API data are outside the contract. Native output is opt-in and restricted to adapter-controlled normalized fields; a complete SDK response must never be returned.
+
+Alibaba Redis fixed detail: `alibaba.redis.describe_instance_attribute` takes only `instance_id`, requires one configured account and an exact allowed region, and calls R-kvstore `DescribeInstanceAttribute` (2015-01-01). It returns one matching cache row with status, engine version, memory capacity in MB, instance class, architecture, node type and billing mode. Connection endpoints, IPs, ports, security-IP lists and raw configuration are not returned. Cursors and arbitrary request parameters are rejected.

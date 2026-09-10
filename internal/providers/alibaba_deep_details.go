@@ -119,6 +119,9 @@ func (a *alibabaAdapter) readDeepDetail(ctx context.Context, request provider.Na
 	if err != nil {
 		return provider.Page{}, err
 	}
+	if spec.kind == "cache" {
+		return a.alibabaRedisDetail(ctx, spec, request, account, region)
+	}
 	if spec.domain == "database" {
 		id, err := nativeIdentifier(request.Params, "db_instance_id")
 		if err != nil {
