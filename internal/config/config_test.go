@@ -391,3 +391,15 @@ func TestConfigValidateLimitsBoundaries(t *testing.T) {
 		})
 	}
 }
+func TestTencentResourceMode(t *testing.T) {
+	for _, mode := range []string{"direct", "cloudrc"} {
+		if err := validateOptions("test", model.ProviderTencent, map[string]string{"resource_mode": mode}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, options := range []map[string]string{{"resource_mode": "typo"}, {"resource_mode": "direct", "resource_view_id": "view"}} {
+		if err := validateOptions("test", model.ProviderTencent, options); err == nil {
+			t.Fatal("invalid resource mode accepted")
+		}
+	}
+}

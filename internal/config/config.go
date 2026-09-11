@@ -220,10 +220,16 @@ func validateOptions(name string, provider model.Provider, options map[string]st
 		model.ProviderAzure:      {},
 		model.ProviderAlibaba:    {"resource_view": true},
 		model.ProviderHuawei:     {"billing_site": true},
-		model.ProviderTencent:    {"resource_view_id": true, "billing_currency": true},
+		model.ProviderTencent:    {"resource_view_id": true, "billing_currency": true, "resource_mode": true},
 		model.ProviderVolcengine: {},
 	}
+	if provider == model.ProviderTencent && options["resource_mode"] == "direct" && options["resource_view_id"] != "" {
+		return fmt.Errorf("profile %q direct resources cannot use resource_view_id", name)
+	}
 	for key, value := range options {
+		if provider == model.ProviderTencent && key == "resource_mode" && value != "direct" && value != "cloudrc" {
+			return fmt.Errorf("profile %q resource_mode must be direct or cloudrc", name)
+		}
 		if !allowed[provider][key] {
 			return fmt.Errorf("profile %q option %q is not allowed for provider %s", name, key, provider)
 		}

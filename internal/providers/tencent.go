@@ -37,6 +37,15 @@ func (a *tencentAdapter) Profile() string          { return a.name }
 func (a *tencentAdapter) Capabilities() []provider.Capability {
 	c := capabilities(model.ProviderTencent, tencentResourcesOperation, tencentMetricsOperation, tencentCostsOperation)
 	for i := range c {
+		if c[i].Source == model.SourceResources && a.profile.Options["resource_mode"] == "direct" {
+			c[i].Operations = append([]string{tencentDirectResourcesOperation}, tencentDirectResourceOperations...)
+			c[i].Domains = []string{"compute", "database", "kubernetes", "network", "storage"}
+			c[i].Kinds = []string{"instance", "database", "cache", "cluster", "load_balancer", "public_ip", "nat_gateway", "bucket"}
+			c[i].Notes = "Direct product inventory: CVM, MySQL, Redis, TKE, CLB, EIP, NAT and COS only; one exact region and one configured account; CVM rows include addresses; no snapshot guarantee"
+			if len(a.profile.Scopes.Accounts) != 1 || !hasExactRegion(a.profile.Regions) {
+				c[i].Status = "not_configured"
+			}
+		}
 		if (c[i].Source == model.SourceMetrics || c[i].Source == model.SourceCosts) && len(a.profile.Scopes.Accounts) != 1 {
 			c[i].Status = "not_configured"
 			c[i].Notes = "requires exactly one scopes.accounts entry because these APIs do not select or return a target account"
@@ -71,6 +80,9 @@ func (a *tencentAdapter) Readiness(context.Context) model.ProfileStatus {
 	return readiness(a.name, model.ProviderTencent, a.profile, []string{"TENCENTCLOUD_SECRET_ID", "TENCENTCLOUD_SECRET_KEY"})
 }
 func (a *tencentAdapter) Query(ctx context.Context, req provider.QueryRequest) (provider.Page, error) {
+	if req.Source == model.SourceResources && a.profile.Options["resource_mode"] == "direct" {
+		return a.queryDirectResources(ctx, req)
+	}
 	if req.Source == model.SourceMetrics {
 		return a.queryMetrics(ctx, req)
 	}
