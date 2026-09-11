@@ -64,7 +64,7 @@ func (a *tencentAdapter) Operations() []provider.Operation {
 	operations = append(operations, tencentCLBOperation(), tencentListenersOperation(), tencentCLBListOperation())
 	operations = append(operations, tencentTargetOperations()...)
 	operations = append(operations, tencentNATRuleOperations()...)
-	operations = append(operations, tencentCOSConfigOperation())
+	operations = append(operations, tencentCOSConfigOperation(), tencentCOSListOp())
 	return append(operations, deepDetailOperations(model.ProviderTencent)...)
 }
 func (a *tencentAdapter) Readiness(context.Context) model.ProfileStatus {
@@ -102,6 +102,9 @@ func (a *tencentAdapter) NativeRead(ctx context.Context, req provider.NativeRequ
 	}
 	if req.Operation == tencentCLBListOperationName {
 		return a.readCLBList(ctx, req)
+	}
+	if req.Operation == tencentCOSListOperation {
+		return a.readCOSList(ctx, req)
 	}
 	if req.Operation == tencentCOSOperation {
 		return a.readCOSConfig(ctx, req)
