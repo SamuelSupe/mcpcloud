@@ -7,6 +7,7 @@ package providers
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
@@ -37,6 +38,28 @@ type rawCachePage struct {
 	} `xml:"DescribeReplicationGroupsResult>ReplicationGroups>ReplicationGroup"`
 	Marker      string `xml:"DescribeCacheClustersResult>Marker"`
 	GroupMarker string `xml:"DescribeReplicationGroupsResult>Marker"`
+}
+
+type rawCacheCursor struct {
+	Marker string `json:"marker,omitempty"`
+	Offset int    `json:"offset,omitempty"`
+}
+
+func decodeRawCacheCursor(token, operation string) (rawCacheCursor, error) {
+	if token == "" {
+		return rawCacheCursor{}, nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	var cursor rawCacheCursor
+	if err != nil || json.Unmarshal(raw, &cursor) != nil || cursor.Offset < 0 || (cursor.Marker == "" && cursor.Offset == 0) {
+		return rawCacheCursor{}, &provider.Error{Code: "invalid_cursor", Operation: operation, Message: "invalid ElastiCache cursor"}
+	}
+	return cursor, nil
+}
+
+func encodeRawCacheCursor(cursor rawCacheCursor) string {
+	raw, _ := json.Marshal(cursor)
+	return base64.RawURLEncoding.EncodeToString(raw)
 }
 
 func (a *awsAdapter) fetchAWSRawService(ctx context.Context, cfg awsbase.Config, req provider.NativeRequest, region, account string, limit int32) (provider.Page, error) {
@@ -73,10 +96,17 @@ func (a *awsAdapter) rawElastiCache(ctx context.Context, cfg awsbase.Config, req
 	if req.Operation == "aws.elasticache.describe_replication_groups" {
 		action = "DescribeReplicationGroups"
 	}
-	q := url.Values{"Action": {action}, "Version": {"2015-02-02"}, "MaxRecords": {""}}
-	q.Set("MaxRecords", strconv.Itoa(int(limit)))
-	if req.PageToken != "" {
-		q.Set("Marker", req.PageToken)
+	cursor, err := decodeRawCacheCursor(req.PageToken, req.Operation)
+	if err != nil {
+		return provider.Page{}, err
+	}
+	// ElastiCache requires MaxRecords >= 20. Re-read a provider page with an
+	// offset cursor when MCP clients request a smaller page so the MCP limit is
+	// still honored.
+	providerLimit := max(limit, 20)
+	q := url.Values{"Action": {action}, "Version": {"2015-02-02"}, "MaxRecords": {strconv.Itoa(int(providerLimit))}}
+	if cursor.Marker != "" {
+		q.Set("Marker", cursor.Marker)
 	}
 	endpoint := "https://elasticache." + region + ".amazonaws.com.cn/?" + q.Encode()
 	empty := sha256.Sum256(nil)
@@ -96,7 +126,7 @@ func (a *awsAdapter) rawElastiCache(ctx context.Context, cfg awsbase.Config, req
 	if err = xml.Unmarshal(b, &out); err != nil {
 		return provider.Page{}, err
 	}
-	page := provider.Page{Rows: []map[string]any{}, Requests: 1}
+	rows := []map[string]any{}
 	row := func(id, kind string) map[string]any {
 		return newDeepDetailRow(a.Provider(), a.name, id, id, "elasticache", "AWS::ElastiCache::"+kind, "database", "cache", region, account)
 	}
@@ -104,17 +134,27 @@ func (a *awsAdapter) rawElastiCache(ctx context.Context, cfg awsbase.Config, req
 		r := row(v.ID, "CacheCluster")
 		r["state"] = v.Status
 		r["attributes"] = map[string]any{"engine": v.Engine, "node_count": v.Nodes}
-		page.Rows = append(page.Rows, r)
+		rows = append(rows, r)
 	}
 	for _, v := range out.Groups {
 		r := row(v.ID, "ReplicationGroup")
 		r["state"] = v.Status
 		r["attributes"] = map[string]any{"engine": v.Engine}
-		page.Rows = append(page.Rows, r)
+		rows = append(rows, r)
 	}
-	page.NextToken = out.Marker
-	if page.NextToken == "" {
-		page.NextToken = out.GroupMarker
+	if cursor.Offset >= len(rows) && cursor.Offset != 0 {
+		return provider.Page{}, &provider.Error{Code: "invalid_cursor", Operation: req.Operation, Message: "ElastiCache cursor offset is outside the provider page"}
+	}
+	end := min(cursor.Offset+int(limit), len(rows))
+	page := provider.Page{Rows: rows[cursor.Offset:end], Requests: 1}
+	providerMarker := out.Marker
+	if providerMarker == "" {
+		providerMarker = out.GroupMarker
+	}
+	if end < len(rows) {
+		page.NextToken = encodeRawCacheCursor(rawCacheCursor{Marker: cursor.Marker, Offset: end})
+	} else if providerMarker != "" {
+		page.NextToken = encodeRawCacheCursor(rawCacheCursor{Marker: providerMarker})
 	}
 	page.Scanned = len(page.Rows)
 	return page, nil
