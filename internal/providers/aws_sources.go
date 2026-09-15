@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	awsbase "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
@@ -145,9 +146,10 @@ func (a *awsAdapter) queryCosts(ctx context.Context, req provider.QueryRequest) 
 		return provider.Page{}, err
 	}
 	serviceKey, accountKey := "SERVICE", "LINKED_ACCOUNT"
+	granularity := awsCostGranularity(start, end)
 	input := &costexplorer.GetCostAndUsageInput{
 		TimePeriod:  &costtypes.DateInterval{Start: awsbase.String(start.Format("2006-01-02")), End: awsbase.String(end.Format("2006-01-02"))},
-		Granularity: costtypes.GranularityDaily,
+		Granularity: granularity,
 		Metrics:     []string{"UnblendedCost"},
 		GroupBy:     []costtypes.GroupDefinition{{Type: costtypes.GroupDefinitionTypeDimension, Key: &serviceKey}, {Type: costtypes.GroupDefinitionTypeDimension, Key: &accountKey}},
 	}
@@ -187,6 +189,7 @@ func (a *awsAdapter) queryCosts(ctx context.Context, req provider.QueryRequest) 
 			row := costRow(model.ProviderAWS, a.name, id, date, account, service, "", amount, *value.Unit)
 			native := row["native"].(map[string]any)
 			native["metric"] = "UnblendedCost"
+			native["granularity"] = string(granularity)
 			rows = append(rows, row)
 		}
 	}
@@ -195,6 +198,18 @@ func (a *awsAdapter) queryCosts(ctx context.Context, req provider.QueryRequest) 
 		next = *output.NextPageToken
 	}
 	return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}, nil
+}
+
+// awsCostGranularity makes monthly billing explicit rather than silently
+// aggregating daily CE results. A month request must be an exact UTC calendar
+// boundary; all other ranges retain daily semantics.
+func awsCostGranularity(start, end time.Time) costtypes.Granularity {
+	if start.Location() == time.UTC && end.Location() == time.UTC && start.Day() == 1 && end.Day() == 1 &&
+		start.Hour() == 0 && start.Minute() == 0 && start.Second() == 0 && start.Nanosecond() == 0 &&
+		end.Hour() == 0 && end.Minute() == 0 && end.Second() == 0 && end.Nanosecond() == 0 && end.After(start) {
+		return costtypes.GranularityMonthly
+	}
+	return costtypes.GranularityDaily
 }
 
 func awsCostExplorerRegion(regions []string) string {
