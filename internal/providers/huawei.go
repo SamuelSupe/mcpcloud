@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/huaweicloud/huaweicloud-sdk-go-v3/core/auth/basic"
 	httpconfig "github.com/huaweicloud/huaweicloud-sdk-go-v3/core/config"
 	rms "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/rms/v1"
 	rmsmodel "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/rms/v1/model"
@@ -17,9 +16,23 @@ import (
 )
 
 const (
-	huaweiResourcesOperation = "huawei.rms.list_all_resources"
-	huaweiMetricsOperation   = "huawei.ces.batch_list_metric_data"
-	huaweiCostsOperation     = "huawei.bss.list_costs"
+	huaweiResourcesOperation         = "huawei.rms.list_all_resources"
+	huaweiMetricsOperation           = "huawei.ces.batch_list_metric_data"
+	huaweiCostsOperation             = "huawei.bss.list_costs"
+	huaweiCCENodesOperation          = "huawei.cce.list_nodes"
+	huaweiCCENodePoolsOperation      = "huawei.cce.list_node_pools"
+	huaweiVPCListOperation           = "huawei.vpc.list_vpcs"
+	huaweiSubnetListOperation        = "huawei.vpc.list_subnets"
+	huaweiSecurityGroupListOperation = "huawei.vpc.list_security_groups"
+	huaweiDCSListOperation           = "huawei.dcs.list_instances"
+	huaweiOBSListOperation           = "huawei.obs.list_buckets"
+	huaweiOBSPFSListOperation        = "huawei.obs.list_parallel_file_systems"
+	huaweiOBSStorageInfoOperation    = "huawei.obs.get_bucket_storage_info"
+	huaweiCESListMetricsOperation    = "huawei.ces.list_metrics"
+	huaweiELBListOperation           = "huawei.elb.list_load_balancers"
+	huaweiELBListenersOperation      = "huawei.elb.list_listeners"
+	huaweiELBPoolsOperation          = "huawei.elb.list_pools"
+	huaweiELBMembersOperation        = "huawei.elb.list_members"
 )
 
 type huaweiAdapter struct {
@@ -52,6 +65,19 @@ func (a *huaweiAdapter) Operations() []provider.Operation {
 	operations := []provider.Operation{operation(huaweiResourcesOperation, model.ProviderHuawei, "rms", "List Huawei Cloud resources through RMS", map[string]any{"region": map[string]any{"type": "string"}, "type": map[string]any{"type": "string"}, "id": map[string]any{"type": "string"}, "name": map[string]any{"type": "string"}, "enterprise_project_id": map[string]any{"type": "string"}})}
 	operations = append(operations, nativeProductOperations(model.ProviderHuawei, "rms")...)
 	operations = append(operations, instanceDetailOperations(model.ProviderHuawei)...)
+	operations = append(operations,
+		operation(huaweiCCENodesOperation, model.ProviderHuawei, "cce", "List nodes in one Huawei CCE cluster", detailParameters("project_id", "cluster_id")),
+		operation(huaweiCCENodePoolsOperation, model.ProviderHuawei, "cce", "List node pools in one Huawei CCE cluster", detailParameters("project_id", "cluster_id")),
+	)
+	operations = append(operations, huaweiNetworkAndDCSOperations()...)
+	operations = append(operations, huaweiOBSOperations()...)
+	operations = append(operations, huaweiCESOperations()...)
+	operations = append(operations,
+		operation(huaweiELBListOperation, model.ProviderHuawei, "elb", "List Huawei ELB load balancers", detailParameters("project_id")),
+		operation(huaweiELBListenersOperation, model.ProviderHuawei, "elb", "List Huawei ELB listeners", detailParameters("project_id")),
+		operation(huaweiELBPoolsOperation, model.ProviderHuawei, "elb", "List Huawei ELB backend pools", detailParameters("project_id")),
+		operation(huaweiELBMembersOperation, model.ProviderHuawei, "elb", "List members and health states in one Huawei ELB backend pool", detailParameters("project_id", "pool_id")),
+	)
 	return append(operations, deepDetailOperations(model.ProviderHuawei)...)
 }
 func (a *huaweiAdapter) Readiness(context.Context) model.ProfileStatus {
@@ -82,6 +108,27 @@ func (a *huaweiAdapter) Query(ctx context.Context, req provider.QueryRequest) (p
 	return page, err
 }
 func (a *huaweiAdapter) NativeRead(ctx context.Context, req provider.NativeRequest) (provider.Page, error) {
+	if req.Operation == huaweiCCENodesOperation {
+		return a.listCCENodes(ctx, req)
+	}
+	if req.Operation == huaweiCCENodePoolsOperation {
+		return a.listCCENodePools(ctx, req)
+	}
+	if isHuaweiNetworkOrDCSOperation(req.Operation) {
+		return a.listHuaweiNetworkOrDCS(ctx, req)
+	}
+	if req.Operation == huaweiOBSListOperation || req.Operation == huaweiOBSPFSListOperation {
+		return a.listHuaweiOBSBuckets(ctx, req)
+	}
+	if req.Operation == huaweiOBSStorageInfoOperation {
+		return a.getHuaweiOBSStorageInfo(ctx, req)
+	}
+	if req.Operation == huaweiCESListMetricsOperation {
+		return a.listHuaweiCESMetrics(ctx, req)
+	}
+	if req.Operation == huaweiELBListOperation || req.Operation == huaweiELBListenersOperation || req.Operation == huaweiELBPoolsOperation || req.Operation == huaweiELBMembersOperation {
+		return a.listELBResources(ctx, req)
+	}
 	if detail, ok := instanceDetailFor(model.ProviderHuawei, req.Operation); ok {
 		return a.showServerDetail(ctx, req, detail)
 	}
@@ -130,17 +177,13 @@ func (a *huaweiAdapter) list(ctx context.Context, params map[string]string, allo
 			regionID = "cn-north-4"
 		}
 	}
-	ak := envValue(a.profile, "HUAWEICLOUD_SDK_AK", "HUAWEICLOUD_SDK_AK")
-	sk := envValue(a.profile, "HUAWEICLOUD_SDK_SK", "HUAWEICLOUD_SDK_SK")
-	token := envValue(a.profile, "HUAWEICLOUD_SDK_SECURITY_TOKEN", "HUAWEICLOUD_SDK_SECURITY_TOKEN")
-	if ak == "" || sk == "" {
-		return provider.Page{}, &provider.Error{Code: "missing_credentials", Operation: huaweiResourcesOperation, Message: "Huawei Cloud credential environment variables are not set"}
-	}
-	credential := basic.NewCredentialsBuilder().WithAk(ak).WithSk(sk).WithSecurityToken(token).Build()
-	region, err := rmsregion.SafeValueOf(regionID)
+	credential, err := a.huaweiGlobalCredential(huaweiResourcesOperation)
 	if err != nil {
-		return provider.Page{}, &provider.Error{Code: "invalid_region", Operation: huaweiResourcesOperation, Message: err.Error()}
+		return provider.Page{}, err
 	}
+	// RMS exposes a global endpoint. regionID is the resource filter sent in
+	// ListAllResourcesRequest and must not be used to resolve the RMS endpoint.
+	region := rmsregion.CN_NORTH_4
 	timeout := 120 * time.Second
 	if deadline, ok := ctx.Deadline(); ok {
 		timeout = time.Until(deadline)

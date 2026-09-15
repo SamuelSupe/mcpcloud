@@ -195,6 +195,15 @@ func (a *scopedAdapter) serviceAllowed(row map[string]any) bool {
 }
 
 func (a *scopedAdapter) rowRegionAllowed(row map[string]any) bool {
+	// Huawei OBS account listings are authorized by the configured profile but
+	// can legitimately contain buckets from more than one region. The marker is
+	// set only by the typed OBS list operation; all other rows retain exact
+	// configured-region enforcement.
+	if a.Provider() == model.ProviderHuawei && row["service"] == "obs" {
+		if accountScoped, _ := row["account_scoped"].(bool); accountScoped {
+			return true
+		}
+	}
 	if len(a.profile.Regions) == 0 || contains(a.profile.Regions, "*") {
 		return true
 	}
