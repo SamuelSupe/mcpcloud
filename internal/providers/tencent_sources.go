@@ -209,6 +209,9 @@ func tencentMetricUnit(namespace, metric string) string {
 }
 
 func (a *tencentAdapter) queryCosts(ctx context.Context, req provider.QueryRequest) (provider.Page, error) {
+	if a.profile.Options["billing_source"] == "intl_partner_customer" {
+		return a.queryPartnerCosts(ctx, req)
+	}
 	start, end, err := rangeRequired(req, tencentCostsOperation)
 	if err != nil {
 		return provider.Page{}, err
