@@ -41,7 +41,7 @@ var NativeFields = map[Provider][]string{
 	ProviderAzure:      {"resource_type", "type", "resource_group", "instance_type", "metric_namespace", "metric_name", "statistic", "scope_type"},
 	ProviderAlibaba:    {"resource_type", "instance_type", "namespace", "metric_name", "statistic", "product_code", "billing_item"},
 	ProviderHuawei:     {"resource_type", "provider_type", "instance_type", "namespace", "metric_name", "statistic", "cost_type", "amount_type"},
-	ProviderTencent:    {"resource_type", "instance_type", "namespace", "metric_name", "statistic", "dimension", "fee_type"},
+	ProviderTencent:    {"resource_type", "instance_type", "namespace", "metric_name", "statistic", "dimension", "fee_type", "amount_decimal", "product_name", "billing_source", "bill_type", "currency_source"},
 	ProviderVolcengine: {"resource_type", "instance_type", "namespace", "sub_namespace", "metric_name", "statistic", "bill_category", "billing_mode"},
 }
 
