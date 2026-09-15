@@ -36,8 +36,12 @@ func (a *tencentAdapter) queryPartnerCosts(ctx context.Context, req provider.Que
 	if err != nil {
 		return provider.Page{}, err
 	}
-	if start.Hour() != 0 || start.Minute() != 0 || start.Second() != 0 || start.Nanosecond() != 0 || end.Hour() != 0 || end.Minute() != 0 || end.Second() != 0 || end.Nanosecond() != 0 {
-		return provider.Page{}, partnerCostError("invalid_range", "daily partner costs require midnight-aligned dates")
+	start, end = partnerDailyBounds(start, end)
+	if !start.Before(end) {
+		if req.PageToken != "" {
+			return provider.Page{}, partnerCostError("invalid_cursor", "partner cost cursor is outside the requested dates")
+		}
+		return provider.Page{}, nil
 	}
 	monthStart := time.Date(start.Year(), start.Month(), 1, 0, 0, 0, 0, start.Location())
 	if end.After(monthStart.AddDate(0, 2, 0)) {
@@ -71,6 +75,18 @@ func (a *tencentAdapter) queryPartnerCosts(ctx context.Context, req provider.Que
 		return provider.Page{}, tencentSourceError(tencentPartnerCostsOperation, err)
 	}
 	return a.partnerCostPage(response.GetBody(), scope)
+}
+
+func partnerDailyBounds(start, end time.Time) (time.Time, time.Time) {
+	ceilDay := func(value time.Time) time.Time {
+		value = value.UTC()
+		day := time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
+		if day.Before(value) {
+			day = day.AddDate(0, 0, 1)
+		}
+		return day
+	}
+	return ceilDay(start), ceilDay(end)
 }
 
 var partnerAmountPattern = regexp.MustCompile(`^-?[0-9]+(\.[0-9]{1,8})?$`)
