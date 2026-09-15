@@ -140,26 +140,28 @@ func (r *Runner) probeProfile(ctx context.Context, probeID string, adapter provi
 		return result
 	}
 	result.Operation = operation.Name
-	result.Region = probeRegion(adapter)
-	request := provider.NativeRequest{Operation: operation.Name, Region: result.Region, Limit: probePageSize}
-	for pageNumber := 0; pageNumber < probeMaxPages; pageNumber++ {
-		page, err := r.reader.NativeReadWithID(ctx, probeID, adapter.Profile(), request)
-		if err != nil {
-			result.Error = safeError(err, operation.Name)
-			return result
+	for _, region := range probeRegions(adapter) {
+		result.Region = region
+		request := provider.NativeRequest{Operation: operation.Name, Region: region, Limit: probePageSize}
+		for pageNumber := 0; pageNumber < probeMaxPages; pageNumber++ {
+			page, err := r.reader.NativeReadWithID(ctx, probeID, adapter.Profile(), request)
+			if err != nil {
+				result.Error = safeError(err, operation.Name)
+				return result
+			}
+			result.Authenticated = true
+			result.ObservedScopes = mergeScopes(result.ObservedScopes, observedScopes(page.Rows))
+			result.ScopeVerified, _ = scopeEvidence(adapter, result.DeclaredScopes, result.ObservedScopes)
+			if result.ScopeVerified {
+				result.Status = StatusReady
+				result.IdentityStatus = "scope_verified"
+				return result
+			}
+			if page.NextToken == "" || page.NextToken == request.PageToken {
+				break
+			}
+			request.PageToken = page.NextToken
 		}
-		result.Authenticated = true
-		result.ObservedScopes = mergeScopes(result.ObservedScopes, observedScopes(page.Rows))
-		result.ScopeVerified, _ = scopeEvidence(adapter, result.DeclaredScopes, result.ObservedScopes)
-		if result.ScopeVerified {
-			result.Status = StatusReady
-			result.IdentityStatus = "scope_verified"
-			return result
-		}
-		if page.NextToken == "" || page.NextToken == request.PageToken {
-			break
-		}
-		request.PageToken = page.NextToken
 	}
 	var partialScopeEvidence bool
 	result.ScopeVerified, partialScopeEvidence = scopeEvidence(adapter, result.DeclaredScopes, result.ObservedScopes)
@@ -182,8 +184,15 @@ func inventoryOperation(adapter provider.Adapter) (provider.Operation, bool) {
 		if capability.Source != model.SourceResources || len(capability.Operations) == 0 {
 			continue
 		}
-		operation, ok := byName[capability.Operations[0]]
-		return operation, ok
+		// A resource capability may lead with a DSL-only aggregate operation.
+		// Readiness uses the first registered native read instead, so an optional
+		// inventory backend (for example Tencent Resource Center) cannot make a
+		// direct-product profile appear unavailable.
+		for _, name := range capability.Operations {
+			if operation, ok := byName[name]; ok {
+				return operation, true
+			}
+		}
 	}
 	return provider.Operation{}, false
 }
@@ -197,17 +206,21 @@ func capabilityStatuses(capabilities []provider.Capability) []CapabilityStatus {
 	return result
 }
 
-func probeRegion(adapter provider.Adapter) string {
+func probeRegions(adapter provider.Adapter) []string {
 	configured, ok := adapter.(interface{ ConfiguredRegions() []string })
 	if !ok {
-		return ""
+		return []string{""}
 	}
+	regions := make([]string, 0)
 	for _, region := range configured.ConfiguredRegions() {
 		if region != "" && region != "*" {
-			return region
+			regions = append(regions, region)
 		}
 	}
-	return ""
+	if len(regions) == 0 {
+		return []string{""}
+	}
+	return regions
 }
 
 func declaredScopes(raw map[string]any) map[string][]string {
