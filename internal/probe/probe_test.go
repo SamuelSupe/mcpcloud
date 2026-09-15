@@ -26,6 +26,13 @@ type probeTestAdapter struct {
 	nativeCalls int
 }
 
+type regionProbeAdapter struct {
+	provider.Adapter
+	regions []string
+}
+
+func (a regionProbeAdapter) ConfiguredRegions() []string { return a.regions }
+
 func (a *probeTestAdapter) Provider() model.Provider { return a.provider }
 func (a *probeTestAdapter) Profile() string          { return a.profile }
 func (a *probeTestAdapter) Capabilities() []provider.Capability {
@@ -210,6 +217,22 @@ func TestRunnerUsesFixedInventoryNativeReadAndSafeSortedProfileSelection(t *test
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("probe report contains forbidden provider detail %q: %s", forbidden, text)
 		}
+	}
+}
+
+func TestInventoryOperationSkipsDSLOnlyCapabilityEntry(t *testing.T) {
+	adapter := newProbeTestAdapter("tencent-prod", model.ProviderTencent, "account", "account-1")
+	adapter.capability.Operations = []string{"tencent.inventory.list_resources", adapter.operation.Name}
+	operation, ok := inventoryOperation(adapter)
+	if !ok || operation.Name != adapter.operation.Name {
+		t.Fatalf("inventoryOperation() = (%#v, %v), want registered native operation %q", operation, ok, adapter.operation.Name)
+	}
+}
+
+func TestProbeRegionsUsesEveryExactConfiguredRegion(t *testing.T) {
+	adapter := regionProbeAdapter{Adapter: newProbeTestAdapter("tencent-prod", model.ProviderTencent, "account", "account-1"), regions: []string{"ap-shanghai", "*", "ap-jakarta"}}
+	if got, want := probeRegions(adapter), []string{"ap-shanghai", "ap-jakarta"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("probeRegions() = %#v, want %#v", got, want)
 	}
 }
 
