@@ -103,6 +103,79 @@ func (a *huaweiAdapter) readDeepDetail(ctx context.Context, request provider.Nat
 	return oneDeepDetailPage(a.huaweiCCEDetailRow(response, regionID, project)), nil
 }
 
+func (a *huaweiAdapter) listCCENodes(ctx context.Context, request provider.NativeRequest) (provider.Page, error) {
+	operationSpec := provider.Operation{Name: huaweiCCENodesOperation, Parameters: detailParameters("project_id", "cluster_id")}
+	if err := operationSpec.ValidateParams(request.Params); err != nil {
+		return provider.Page{}, err
+	}
+	projectRaw, err := nativeIdentifier(request.Params, "project_id")
+	if err != nil {
+		return provider.Page{}, deepParameterError(huaweiCCENodesOperation, err)
+	}
+	project, err := exactDetailScope(a.profile.Scopes.Projects, projectRaw, huaweiCCENodesOperation, "project_id")
+	if err != nil {
+		return provider.Page{}, err
+	}
+	clusterID, err := nativeIdentifier(request.Params, "cluster_id")
+	if err != nil || clusterID == "" {
+		return provider.Page{}, &provider.Error{Code: "missing_parameter", Operation: huaweiCCENodesOperation, Message: "parameter cluster_id is required"}
+	}
+	regionID, err := exactDetailRegion(request.Region, a.profile.Regions, huaweiCCENodesOperation)
+	if err != nil {
+		return provider.Page{}, err
+	}
+	credential, err := a.huaweiBasicCredential(huaweiCCENodesOperation, project)
+	if err != nil {
+		return provider.Page{}, err
+	}
+	region, err := cceregion.SafeValueOf(regionID)
+	if err != nil {
+		return provider.Page{}, &provider.Error{Code: "invalid_region", Operation: huaweiCCENodesOperation, Message: err.Error()}
+	}
+	hc, err := cce.CceClientBuilder().WithRegion(region).WithCredential(credential).WithHttpConfig(huaweiHTTPConfig(ctx)).SafeBuild()
+	if err != nil {
+		return provider.Page{}, &provider.Error{Code: "authentication_error", Operation: huaweiCCENodesOperation, Message: err.Error()}
+	}
+	limit := request.Limit
+	if limit <= 0 || limit > 2000 {
+		limit = 100
+	}
+	limit32 := int32(limit)
+	apiRequest := &ccemodel.ListNodesRequest{ClusterId: clusterID, Limit: &limit32}
+	if request.PageToken != "" {
+		apiRequest.Marker = &request.PageToken
+	}
+	response, err := cce.NewCceClient(hc).ListNodes(apiRequest)
+	if err != nil {
+		return provider.Page{}, huaweiDeepError(huaweiCCENodesOperation, err)
+	}
+	rows := []map[string]any{}
+	if response != nil && response.Items != nil {
+		for _, node := range *response.Items {
+			if node.Metadata == nil || node.Metadata.Uid == nil {
+				continue
+			}
+			name := ""
+			if node.Metadata.Name != nil { name = *node.Metadata.Name }
+			row := newDeepDetailRow(a.Provider(), a.name, *node.Metadata.Uid, name, "cce", "CCE::Node", "kubernetes", "node", regionID, project)
+			attrs := row["attributes"].(map[string]any)
+			if node.Metadata.OwnerReferences != nil {
+				if node.Metadata.OwnerReferences.NodepoolID != nil { attrs["node_pool_id"] = *node.Metadata.OwnerReferences.NodepoolID }
+				if node.Metadata.OwnerReferences.NodepoolName != nil { attrs["node_pool_name"] = *node.Metadata.OwnerReferences.NodepoolName }
+			}
+			if node.Status != nil {
+				if node.Status.Phase != nil { row["state"] = strings.ToLower(node.Status.Phase.Value()) }
+				if node.Status.ServerId != nil { attrs["server_id"] = *node.Status.ServerId }
+				if node.Status.ConfigurationUpToDate != nil { attrs["configuration_up_to_date"] = *node.Status.ConfigurationUpToDate }
+			}
+			rows = append(rows, row)
+		}
+	}
+	next := ""
+	if response != nil && response.PageInfo != nil && response.PageInfo.NextMarker != nil { next = *response.PageInfo.NextMarker }
+	return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}, nil
+}
+
 func huaweiDeepError(operation string, err error) error {
 	return &provider.Error{Code: "huawei_api_error", Operation: operation, Message: err.Error(), Retryable: containsAny(strings.ToLower(err.Error()), "throttl", "timeout")}
 }
