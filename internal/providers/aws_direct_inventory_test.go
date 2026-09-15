@@ -103,10 +103,27 @@ func TestAWSDirectInventoryRejectsInvalidRequests(t *testing.T) {
 		{Operation: "aws.rds.describe_db_instances", Limit: 19},
 		{Operation: "aws.eks.list_clusters", Limit: 101},
 		{Operation: "aws.ec2.describe_addresses", PageToken: "invalid"},
+		{Operation: "aws.elbv2.describe_target_health", Params: map[string]any{"target_group_arn": "targetgroup-a"}, PageToken: "invalid"},
+		{Operation: "aws.s3.get_bucket_configuration", Params: map[string]any{"bucket_name": "bucket-a"}, PageToken: "invalid"},
+		{Operation: "aws.eks.describe_nodegroup", Params: map[string]any{"cluster_name": "cluster-a", "nodegroup_name": "nodegroup-a"}, PageToken: "invalid"},
 	} {
 		req.Region = "cn-northwest-1"
 		if _, err := a.NativeRead(context.Background(), req); err == nil {
 			t.Fatalf("accepted invalid pagination: %+v", req)
+		}
+	}
+	for _, req := range []provider.NativeRequest{
+		{Operation: "aws.elbv2.describe_listeners"},
+		{Operation: "aws.elbv2.describe_target_health"},
+		{Operation: "aws.s3.get_bucket_configuration"},
+		{Operation: "aws.ecs.list_services"},
+		{Operation: "aws.ecs.list_tasks"},
+		{Operation: "aws.eks.list_nodegroups"},
+		{Operation: "aws.eks.describe_nodegroup", Params: map[string]any{"cluster_name": "cluster-a"}},
+	} {
+		req.Region = "cn-northwest-1"
+		if _, err := a.NativeRead(context.Background(), req); !hasProviderErrorCode(err, "missing_parameter") {
+			t.Fatalf("accepted or misclassified missing identifier: request=%+v error=%v", req, err)
 		}
 	}
 }

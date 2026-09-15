@@ -36,7 +36,7 @@ const (
 var Sources = []Source{SourceResources, SourceIAM, SourceMetrics, SourceCosts}
 
 var NativeFields = map[Provider][]string{
-	ProviderAWS:        {"resource_type", "arn", "cfn_resource_type", "instance_type", "namespace", "metric_name", "statistic", "metric"},
+	ProviderAWS:        {"resource_type", "arn", "cfn_resource_type", "instance_type", "namespace", "metric_name", "statistic", "metric", "granularity"},
 	ProviderGCP:        {"resource_type", "asset_type", "description", "folders", "instance_type", "metric_type", "billing_table"},
 	ProviderAzure:      {"resource_type", "type", "resource_group", "instance_type", "metric_namespace", "metric_name", "statistic", "scope_type"},
 	ProviderAlibaba:    {"resource_type", "instance_type", "namespace", "metric_name", "statistic", "product_code", "billing_item"},
