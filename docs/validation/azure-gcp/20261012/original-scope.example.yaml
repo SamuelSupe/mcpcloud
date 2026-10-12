@@ -1,0 +1,34 @@
+profiles:
+  azure-validation:
+    provider: azure
+    credential:
+      source: env
+    scopes:
+      subscriptions: [YOUR_AZURE_SUBSCRIPTION_ID]
+    regions: [eastus2, southeastasia, westus2]
+    services: [compute, storage, network, iam, monitoring, logging, cost, database, kubernetes]
+  gcp-validation:
+    provider: gcp
+    credential:
+      source: env
+    scopes:
+      projects: [YOUR_GCP_PROJECT_ID]
+    options:
+      billing_table: YOUR_BILLING_EXPORT_PROJECT_ID.billing_data.YOUR_STANDARD_BILLING_TABLE
+      billing_project: YOUR_GCP_PROJECT_ID
+      billing_location: US
+    regions: ['*']
+    services: [compute, storage, network, iam, monitoring, logging, cost, database, kubernetes]
+limits:
+  max_targets: 128
+  max_provider_requests: 500
+  max_scanned_items: 50000
+  max_page_size: 100
+  default_timeout: 30s
+  max_timeout: 120s
+  cursor_ttl: 10m
+  concurrency: 8
+server:
+  listen: 127.0.0.1:8121
+  auth_token_env: MCPCLOUD_AUTH_TOKEN
+  allowed_hosts: [127.0.0.1:8121, localhost:8121]

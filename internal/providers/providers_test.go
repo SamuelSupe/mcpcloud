@@ -115,7 +115,7 @@ func TestGCPNativeReadRejectsUnregisteredOperationsBeforeCredentialUse(t *testin
 func TestGCPMetadataRegistersSeparateReadOnlyResourceAndIAMOperations(t *testing.T) {
 	adapter := &gcpAdapter{name: "gcp-prod", profile: config.Profile{Provider: model.ProviderGCP}}
 	operations := adapter.Operations()
-	if len(operations) != len(nativeProductCatalog)+5 {
+	if len(operations) != len(nativeProductCatalog)+19 {
 		t.Fatalf("GCP Operations() = %#v, want resource/IAM plus %d product operations", operations, len(nativeProductCatalog))
 	}
 	got := map[string]bool{}
@@ -1289,6 +1289,12 @@ func TestDeepDetailCatalogRegistersClosedOperationsAndCapabilities(t *testing.T)
 	for _, adapter := range nativeProductTestAdapters() {
 		specs := deepDetailCatalog[adapter.Provider()]
 		want := 2
+		if adapter.Provider() == model.ProviderAzure {
+			want += len(azureNetworkTypes) + 5
+		}
+		if adapter.Provider() == model.ProviderGCP {
+			want += len(gcpNetworkTypes) + 7
+		}
 		if adapter.Provider() == model.ProviderAlibaba {
 			want = 5
 		}
@@ -1322,8 +1328,12 @@ func TestDeepDetailCatalogRegistersClosedOperationsAndCapabilities(t *testing.T)
 					t.Errorf("%s missing %s error = %#v, want missing_parameter", spec.operation, name, err)
 				}
 			}
-			if err := validateDeepDetailRequest(spec, provider.NativeRequest{Params: params, PageToken: "opaque"}); !hasProviderErrorCode(err, "cursor_not_supported") {
-				t.Errorf("%s cursor error = %#v, want cursor_not_supported", spec.operation, err)
+			cursorError := "cursor_not_supported"
+			if spec.domain == "live_pods" {
+				cursorError = "invalid_cursor"
+			}
+			if err := validateDeepDetailRequest(spec, provider.NativeRequest{Params: params, PageToken: "opaque"}); !hasProviderErrorCode(err, cursorError) {
+				t.Errorf("%s cursor error = %#v, want %s", spec.operation, err, cursorError)
 			}
 			for _, forbidden := range []string{"query", "url", "action", "view_arn", "password", "connection_string", "endpoint", "kubeconfig", "certificate", "token", "secret", "user_data", "metadata"} {
 				if _, ok := operation.Parameters[forbidden]; ok {
@@ -1338,7 +1348,7 @@ func TestDeepDetailCatalogRegistersClosedOperationsAndCapabilities(t *testing.T)
 			}
 		}
 	}
-	want := len(model.Providers)*2 + 5
+	want := len(model.Providers)*2 + 17 + len(azureNetworkTypes) + len(gcpNetworkTypes)
 	if len(seen) != want {
 		t.Fatalf("deep detail operation count = %d, want %d", len(seen), want)
 	}

@@ -206,9 +206,18 @@ func envValue(profile config.Profile, logical, fallback string) string {
 }
 
 func baseRow(p model.Provider, profile, id, name, service, nativeType, region, account string, observed time.Time) map[string]any {
+	if p == model.ProviderAzure {
+		region = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(region), " ", ""))
+	}
 	domain, kind := classify(service, nativeType)
 	if p == model.ProviderVolcengine {
 		domain, kind = classifyVolcengine(service, nativeType)
+	}
+	if p == model.ProviderGCP {
+		domain, kind = classifyGCP(nativeType)
+	}
+	if p == model.ProviderAzure {
+		domain, kind = classifyAzure(nativeType)
 	}
 	scope := map[string]any{}
 	switch p {

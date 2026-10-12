@@ -32,6 +32,14 @@ func (a *azureAdapter) queryMetrics(ctx context.Context, req provider.QueryReque
 	if err != nil {
 		return provider.Page{}, err
 	}
+	resourceID := selector.Dimensions["resource_id"]
+	resourcePath := ""
+	if resourceID != "" {
+		resourcePath, err = azureMetricResourcePath(subscription, selector.Parts[0], resourceID)
+		if err != nil {
+			return provider.Page{}, &provider.Error{Code: "invalid_scope", Operation: azureMetricsOperation, Message: err.Error()}
+		}
+	}
 	token, err := a.accessToken(ctx, azureMetricsOperation)
 	if err != nil {
 		return provider.Page{}, err
@@ -52,11 +60,21 @@ func (a *azureAdapter) queryMetrics(ctx context.Context, req provider.QueryReque
 	if len(selector.Dimensions) > 0 {
 		filters := make([]string, 0, len(selector.Dimensions))
 		for name, value := range selector.Dimensions {
+			if name == "resource_id" {
+				continue
+			}
 			filters = append(filters, name+" eq '"+strings.ReplaceAll(value, "'", "''")+"'")
 		}
-		values.Set("$filter", strings.Join(filters, " and "))
+		if len(filters) > 0 {
+			values.Set("$filter", strings.Join(filters, " and "))
+		}
 	}
 	endpoint := "https://management.azure.com/subscriptions/" + url.PathEscape(subscription) + "/providers/microsoft.insights/metrics?" + values.Encode()
+	if resourcePath != "" {
+		values.Del("region")
+		values.Del("aggregation") // Let the metric definition select its supported default.
+		endpoint = "https://management.azure.com" + resourcePath + "/providers/Microsoft.Insights/metrics?" + values.Encode()
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return provider.Page{}, err
@@ -115,7 +133,12 @@ func (a *azureAdapter) queryMetrics(ctx context.Context, req provider.QueryReque
 				if !ok {
 					continue
 				}
-				row := metricRow(model.ProviderAzure, a.name, selector.Raw, "monitor", metric.ID, req.Region, subscription, timestamp, value, metric.Unit, dimensions)
+				id := metric.ID
+				if resourceID != "" {
+					id = resourceID
+					dimensions["resource_id"] = resourceID
+				}
+				row := metricRow(model.ProviderAzure, a.name, selector.Raw, "monitor", id, req.Region, subscription, timestamp, value, metric.Unit, dimensions)
 				native := row["native"].(map[string]any)
 				native["metric_namespace"] = selector.Parts[0]
 				native["metric_name"] = metric.Name.Value
@@ -148,16 +171,7 @@ func (a *azureAdapter) queryCosts(ctx context.Context, req provider.QueryRequest
 		values.Set("$skiptoken", req.PageToken)
 	}
 	endpoint := "https://management.azure.com/subscriptions/" + url.PathEscape(subscription) + "/providers/Microsoft.CostManagement/query?" + values.Encode()
-	body := map[string]any{
-		"type":       "ActualCost",
-		"timeframe":  "Custom",
-		"timePeriod": map[string]any{"from": start.Format(time.RFC3339), "to": end.Format(time.RFC3339)},
-		"dataset": map[string]any{
-			"granularity": "Daily",
-			"aggregation": map[string]any{"totalCost": map[string]any{"name": "Cost", "function": "Sum"}},
-			"grouping":    []map[string]any{{"type": "Dimension", "name": "ServiceName"}, {"type": "Dimension", "name": "Currency"}},
-		},
-	}
+	body := azureCostQueryBody(start, end)
 	encoded, _ := json.Marshal(body)
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(encoded))
 	if err != nil {
@@ -173,6 +187,24 @@ func (a *azureAdapter) queryCosts(ctx context.Context, req provider.QueryRequest
 	if err := providerHTTPStatus(response, azureCostsOperation, "azure_api_error"); err != nil {
 		return provider.Page{}, err
 	}
+	return decodeAzureCostPage(response.Body, subscription, a.name)
+}
+
+// Currency is supplied as a response column, not a supported grouping dimension.
+func azureCostQueryBody(start, end time.Time) map[string]any {
+	return map[string]any{
+		"type":       "ActualCost",
+		"timeframe":  "Custom",
+		"timePeriod": map[string]any{"from": start.Format(time.RFC3339), "to": end.Format(time.RFC3339)},
+		"dataset": map[string]any{
+			"granularity": "Daily",
+			"aggregation": map[string]any{"totalCost": map[string]any{"name": "Cost", "function": "Sum"}},
+			"grouping":    []map[string]any{{"type": "Dimension", "name": "ServiceName"}},
+		},
+	}
+}
+
+func decodeAzureCostPage(body io.Reader, subscription, profile string) (provider.Page, error) {
 	var payload struct {
 		Properties struct {
 			NextLink string `json:"nextLink"`
@@ -182,7 +214,9 @@ func (a *azureAdapter) queryCosts(ctx context.Context, req provider.QueryRequest
 			Rows [][]any `json:"rows"`
 		} `json:"properties"`
 	}
-	if err := json.NewDecoder(io.LimitReader(response.Body, 32<<20)).Decode(&payload); err != nil {
+	decoder := json.NewDecoder(io.LimitReader(body, 32<<20))
+	decoder.UseNumber()
+	if err := decoder.Decode(&payload); err != nil {
 		return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: azureCostsOperation, Message: err.Error()}
 	}
 	next, err := azureCostSkipToken(payload.Properties.NextLink, subscription)
@@ -209,7 +243,7 @@ func (a *azureAdapter) queryCosts(ctx context.Context, req provider.QueryRequest
 		service := fmt.Sprint(firstNonNil(values["servicename"], values["service"]))
 		currency := fmt.Sprint(values["currency"])
 		id := strings.Join([]string{date, subscription, service, currency}, ":")
-		row := costRow(model.ProviderAzure, a.name, id, date, subscription, service, "", amount, currency)
+		row := costRow(model.ProviderAzure, profile, id, date, subscription, service, "", amount, currency)
 		native := row["native"].(map[string]any)
 		native["scope_type"] = "subscription"
 		rows = append(rows, row)

@@ -1,0 +1,693 @@
+{
+  "date": "2026-10-12",
+  "candidate": "v18",
+  "verificationMode": "reconciliation of saved live evidence; no new cloud calls",
+  "originalFunctionStatus": "implemented and representative live acceptance verified, except deferred Azure costs",
+  "nativeOperationCount": 27,
+  "azureNativeOperationCount": 13,
+  "gcpNativeOperationCount": 14,
+  "nativeOperations": [
+    {
+      "operation": "azure.compute.list_disks",
+      "status": "verified_positive",
+      "rows": 2,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "azure.compute.list_disks page 1"
+      ]
+    },
+    {
+      "operation": "azure.compute.list_instances",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "azure.compute.list_instances page 1"
+      ]
+    },
+    {
+      "operation": "azure.compute.virtual_machines.get",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure.details-audit.20261012.private.json",
+      "evidenceChecks": [
+        "azure.compute.virtual_machines.get"
+      ]
+    },
+    {
+      "operation": "azure.containerservice.managed_clusters.get",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure.details-audit.20261012.private.json",
+      "evidenceChecks": [
+        "azure.containerservice.managed_clusters.get"
+      ]
+    },
+    {
+      "operation": "azure.database.list_resources",
+      "status": "verified_positive",
+      "rows": 2,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "azure.database.list_resources page 1"
+      ]
+    },
+    {
+      "operation": "azure.dbforpostgresql.flexible_servers.get",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure.details-audit.20261012.private.json",
+      "evidenceChecks": [
+        "azure.dbforpostgresql.flexible_servers.get"
+      ]
+    },
+    {
+      "operation": "azure.iam.list_resources",
+      "status": "verified_positive",
+      "rows": 22,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "azure.iam.list_resources page 1"
+      ]
+    },
+    {
+      "operation": "azure.kubernetes.list_resources",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "azure.kubernetes.list_resources page 1"
+      ]
+    },
+    {
+      "operation": "azure.logging.list_resources",
+      "status": "verified_positive",
+      "rows": 2,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "azure.logging.list_resources page 1"
+      ]
+    },
+    {
+      "operation": "azure.monitoring.list_alarms",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.created-alerts.global-config.20261012.private.json",
+      "evidenceChecks": [
+        "azure created alert page 1"
+      ]
+    },
+    {
+      "operation": "azure.network.list_resources",
+      "status": "verified_positive",
+      "rows": 12,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "azure.network.list_resources page 1"
+      ]
+    },
+    {
+      "operation": "azure.resourcegraph.resources",
+      "status": "verified_positive",
+      "rows": 23,
+      "pages": 1,
+      "evidenceFile": "verification.azure.details-v18.20261012.private.json",
+      "evidenceChecks": [
+        "Azure ResourceGraph"
+      ]
+    },
+    {
+      "operation": "azure.storage.list_buckets",
+      "status": "verified_positive",
+      "rows": 2,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "azure.storage.list_buckets page 1"
+      ]
+    },
+    {
+      "operation": "gcp.cloudasset.search_all_iam_policies",
+      "status": "verified_positive",
+      "rows": 46,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.cloudasset.search_all_iam_policies page 1"
+      ]
+    },
+    {
+      "operation": "gcp.cloudasset.search_all_resources",
+      "status": "verified_positive",
+      "rows": 27,
+      "pages": 6,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.cloudasset.search_all_resources page 1",
+        "gcp.cloudasset.search_all_resources page 2",
+        "gcp.cloudasset.search_all_resources page 3",
+        "gcp.cloudasset.search_all_resources page 4",
+        "gcp.cloudasset.search_all_resources page 5",
+        "gcp.cloudasset.search_all_resources page 6"
+      ]
+    },
+    {
+      "operation": "gcp.compute.instances.get",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.compute.instances.get page 1"
+      ]
+    },
+    {
+      "operation": "gcp.compute.list_disks",
+      "status": "verified_positive",
+      "rows": 3,
+      "pages": 6,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.compute.list_disks page 1",
+        "gcp.compute.list_disks page 2",
+        "gcp.compute.list_disks page 3",
+        "gcp.compute.list_disks page 4",
+        "gcp.compute.list_disks page 5",
+        "gcp.compute.list_disks page 6"
+      ]
+    },
+    {
+      "operation": "gcp.compute.list_instances",
+      "status": "verified_positive",
+      "rows": 2,
+      "pages": 6,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.compute.list_instances page 1",
+        "gcp.compute.list_instances page 2",
+        "gcp.compute.list_instances page 3",
+        "gcp.compute.list_instances page 4",
+        "gcp.compute.list_instances page 5",
+        "gcp.compute.list_instances page 6"
+      ]
+    },
+    {
+      "operation": "gcp.container.clusters.get",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.container.clusters.get page 1"
+      ]
+    },
+    {
+      "operation": "gcp.database.list_resources",
+      "status": "verified_positive",
+      "rows": 2,
+      "pages": 6,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.database.list_resources page 1",
+        "gcp.database.list_resources page 2",
+        "gcp.database.list_resources page 3",
+        "gcp.database.list_resources page 4",
+        "gcp.database.list_resources page 5",
+        "gcp.database.list_resources page 6"
+      ]
+    },
+    {
+      "operation": "gcp.iam.list_resources",
+      "status": "verified_positive",
+      "rows": 46,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.iam.list_resources page 1"
+      ]
+    },
+    {
+      "operation": "gcp.kubernetes.list_resources",
+      "status": "verified_positive",
+      "rows": 2,
+      "pages": 6,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.kubernetes.list_resources page 1",
+        "gcp.kubernetes.list_resources page 2",
+        "gcp.kubernetes.list_resources page 3",
+        "gcp.kubernetes.list_resources page 4",
+        "gcp.kubernetes.list_resources page 5",
+        "gcp.kubernetes.list_resources page 6"
+      ]
+    },
+    {
+      "operation": "gcp.logging.list_resources",
+      "status": "verified_positive",
+      "rows": 4,
+      "pages": 8,
+      "evidenceFile": "verification.gcp.original-global-products.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.logging.list_resources unscoped region page 1",
+        "gcp.logging.list_resources unscoped region page 2",
+        "gcp.logging.list_resources unscoped region page 3",
+        "gcp.logging.list_resources unscoped region page 4",
+        "gcp.logging.list_resources unscoped region page 5",
+        "gcp.logging.list_resources unscoped region page 6",
+        "gcp.logging.list_resources unscoped region page 7",
+        "gcp.logging.list_resources unscoped region page 8"
+      ]
+    },
+    {
+      "operation": "gcp.monitoring.list_alarms",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 8,
+      "evidenceFile": "verification.gcp.created-alert-mcp.20261012.private.json",
+      "evidenceChecks": [
+        "gcp created alert page 1",
+        "gcp created alert page 2",
+        "gcp created alert page 3",
+        "gcp created alert page 4",
+        "gcp created alert page 5",
+        "gcp created alert page 6",
+        "gcp created alert page 7",
+        "gcp created alert page 8"
+      ]
+    },
+    {
+      "operation": "gcp.network.list_resources",
+      "status": "verified_positive",
+      "rows": 8,
+      "pages": 6,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.network.list_resources page 1",
+        "gcp.network.list_resources page 2",
+        "gcp.network.list_resources page 3",
+        "gcp.network.list_resources page 4",
+        "gcp.network.list_resources page 5",
+        "gcp.network.list_resources page 6"
+      ]
+    },
+    {
+      "operation": "gcp.sql.instances.get",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.sql.instances.get page 1"
+      ]
+    },
+    {
+      "operation": "gcp.storage.list_buckets",
+      "status": "verified_positive",
+      "rows": 3,
+      "pages": 6,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.storage.list_buckets page 1",
+        "gcp.storage.list_buckets page 2",
+        "gcp.storage.list_buckets page 3",
+        "gcp.storage.list_buckets page 4",
+        "gcp.storage.list_buckets page 5",
+        "gcp.storage.list_buckets page 6"
+      ]
+    }
+  ],
+  "dslAndMetrics": [
+    {
+      "operation": "azure resources DSL",
+      "status": "verified_positive",
+      "rows": 23,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "azure resource DSL page 1"
+      ]
+    },
+    {
+      "operation": "azure IAM DSL",
+      "status": "verified_positive",
+      "rows": 22,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "azure IAM DSL page 1"
+      ]
+    },
+    {
+      "operation": "gcp resources DSL",
+      "status": "verified_positive",
+      "rows": 139,
+      "pages": 2,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "gcp resource DSL page 1",
+        "gcp resource DSL page 2"
+      ]
+    },
+    {
+      "operation": "gcp IAM DSL",
+      "status": "verified_positive",
+      "rows": 46,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-scope.20261012.private.json",
+      "evidenceChecks": [
+        "gcp IAM DSL page 1"
+      ]
+    },
+    {
+      "operation": "azure-validation Microsoft.Compute/virtualMachines::Percentage CPU",
+      "status": "verified_positive",
+      "rows": 60,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-metrics.20261012.private.json",
+      "evidenceChecks": [
+        "azure-validation Microsoft.Compute/virtualMachines::Percentage CPU page 1"
+      ]
+    },
+    {
+      "operation": "azure-validation Microsoft.DBforPostgreSQL/flexibleServers::cpu_percent",
+      "status": "verified_positive",
+      "rows": 60,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-metrics.20261012.private.json",
+      "evidenceChecks": [
+        "azure-validation Microsoft.DBforPostgreSQL/flexibleServers::cpu_percent page 1"
+      ]
+    },
+    {
+      "operation": "gcp-validation compute.googleapis.com/instance/cpu/utilization",
+      "status": "verified_positive",
+      "rows": 116,
+      "pages": 2,
+      "evidenceFile": "verification.azure-gcp.original-metrics.20261012.private.json",
+      "evidenceChecks": [
+        "gcp-validation compute.googleapis.com/instance/cpu/utilization page 1",
+        "gcp-validation compute.googleapis.com/instance/cpu/utilization page 2"
+      ]
+    },
+    {
+      "operation": "gcp-validation cloudsql.googleapis.com/database/cpu/utilization",
+      "status": "verified_positive",
+      "rows": 59,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.original-metrics.20261012.private.json",
+      "evidenceChecks": [
+        "gcp-validation cloudsql.googleapis.com/database/cpu/utilization page 1"
+      ]
+    },
+    {
+      "operation": "gcp-validation redis.googleapis.com/stats/cpu_utilization",
+      "status": "verified_positive",
+      "rows": 232,
+      "pages": 3,
+      "evidenceFile": "verification.azure-gcp.original-metrics.20261012.private.json",
+      "evidenceChecks": [
+        "gcp-validation redis.googleapis.com/stats/cpu_utilization page 1",
+        "gcp-validation redis.googleapis.com/stats/cpu_utilization page 2",
+        "gcp-validation redis.googleapis.com/stats/cpu_utilization page 3"
+      ]
+    },
+    {
+      "operation": "gcp costs DSL",
+      "status": "verified_positive",
+      "rows": 17,
+      "pages": 17,
+      "evidenceFile": "verification.gcp.billing-v18.20261012.private.json",
+      "evidenceChecks": [
+        "GCP real costs page 1",
+        "GCP real costs page 2",
+        "GCP real costs page 3",
+        "GCP real costs page 4",
+        "GCP real costs page 5",
+        "GCP real costs page 6",
+        "GCP real costs page 7",
+        "GCP real costs page 8",
+        "GCP real costs page 9",
+        "GCP real costs page 10",
+        "GCP real costs page 11",
+        "GCP real costs page 12",
+        "GCP real costs page 13",
+        "GCP real costs page 14",
+        "GCP real costs page 15",
+        "GCP real costs page 16",
+        "GCP real costs page 17"
+      ]
+    }
+  ],
+  "originalPlanChecks": [
+    {
+      "operation": "azure.network.load_balancers.get",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure.details-audit.20261012.private.json",
+      "evidenceChecks": [
+        "azure.network.load_balancers.get"
+      ]
+    },
+    {
+      "operation": "azure.network.virtual_networks.get",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure.details-audit.20261012.private.json",
+      "evidenceChecks": [
+        "azure.network.virtual_networks.get"
+      ]
+    },
+    {
+      "operation": "azure.network.nat_gateways.get",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure.details-audit.20261012.private.json",
+      "evidenceChecks": [
+        "azure.network.nat_gateways.get"
+      ]
+    },
+    {
+      "operation": "azure.network.security_groups.get",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure.details-audit.20261012.private.json",
+      "evidenceChecks": [
+        "azure.network.security_groups.get"
+      ]
+    },
+    {
+      "operation": "azure.containerservice.agent_pools.list",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure.details-audit.20261012.private.json",
+      "evidenceChecks": [
+        "azure.containerservice.agent_pools.list"
+      ]
+    },
+    {
+      "operation": "gcp.container.node_pools.list",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.node-pools-v9.20261010.private.json",
+      "evidenceChecks": [
+        "GCP node pool configuration"
+      ]
+    },
+    {
+      "operation": "gcp.compute.networks.get",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.network-v16.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.compute.networks.get"
+      ]
+    },
+    {
+      "operation": "gcp.compute.subnetworks.get",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.network-v16.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.compute.subnetworks.get"
+      ]
+    },
+    {
+      "operation": "gcp.compute.routers.get",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.network-v16.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.compute.routers.get"
+      ]
+    },
+    {
+      "operation": "gcp.compute.backend_services.get",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.network-v16.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.compute.backend_services.get"
+      ]
+    },
+    {
+      "operation": "gcp.compute.forwarding_rules.get",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.network-v16.20261012.private.json",
+      "evidenceChecks": [
+        "gcp.compute.forwarding_rules.get"
+      ]
+    },
+    {
+      "operation": "azure.kubernetes.nodes.list",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.cluster-v18.20261012.private.json",
+      "evidenceChecks": [
+        "azure actual nodes v15"
+      ]
+    },
+    {
+      "operation": "gcp.kubernetes.nodes.list",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.cluster-v18.20261012.private.json",
+      "evidenceChecks": [
+        "gcp actual nodes v15"
+      ]
+    },
+    {
+      "operation": "gcp.compute.backend_services.get_health",
+      "status": "verified_positive",
+      "rows": 1,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.cluster-v18.20261012.private.json",
+      "evidenceChecks": [
+        "GCP regional backend live health v15"
+      ]
+    },
+    {
+      "operation": "azure backend probe metric",
+      "status": "verified_positive",
+      "rows": 60,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.metrics-health-v16.20261012.private.json",
+      "evidenceChecks": [
+        "Azure LB backend probe full page 1"
+      ]
+    },
+    {
+      "operation": "azure storage capacity",
+      "status": "verified_positive",
+      "rows": 24,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.capacity-alert-followup.20261012.private.json",
+      "evidenceChecks": [
+        "Azure UsedCapacity 24h"
+      ]
+    },
+    {
+      "operation": "gcp existing bucket capacity",
+      "status": "verified_positive",
+      "rows": 24,
+      "pages": 1,
+      "evidenceFile": "verification.azure-gcp.final-v16.20261012.private.json",
+      "evidenceChecks": [
+        "GCP existing bucket capacity YOUR_GCP_PROJECT_ID-test"
+      ]
+    }
+  ],
+  "azureCosts": "deferred: Sponsorship platform limitation per user",
+  "gcpCosts": "verified with independent BigQuery reference",
+  "fullCloudReadOnlyAudit": "incomplete; separate evidence requirement",
+  "clientIntegration": "optional additional usage check; not original-function blocker",
+  "extensions": "tracked separately; not included in original-function completion",
+  "originalRetained": true,
+  "originalBinarySha256": "B30C16B78CA54E23C5DF7ACF7E03F891EB31CAE2159B02A8CFF9A908DE75FEF6",
+  "evidence": [
+    {
+      "sha256": "989F8269304A8952915BF14FDD73DF5CA89A7CD1ECE4A6F86AAE2E8E3C6B7B06",
+      "file": "verification.azure-gcp.capacity-alert-followup.20261012.private.json"
+    },
+    {
+      "sha256": "2FF4AFECB023ED6128EB3C38B00ED690761C583C8A896BBFFD7237D58957B960",
+      "file": "verification.azure-gcp.cluster-v18.20261012.private.json"
+    },
+    {
+      "sha256": "B4991939C3C1592402770ECB857EEE7A2D4310CE99B347958453FE52F0DADD11",
+      "file": "verification.azure-gcp.created-alerts.global-config.20261012.private.json"
+    },
+    {
+      "sha256": "FBAEA1AF007B8E2F1A6270E92A0461E1F5629C2E300001493F40AB97318F1FAB",
+      "file": "verification.azure-gcp.final-v16.20261012.private.json"
+    },
+    {
+      "sha256": "7D1AD6D52A1FF93A77DDC3AA89BB11300289F2E5BF0D4004EA9E8277025D5464",
+      "file": "verification.azure-gcp.metrics-health-v16.20261012.private.json"
+    },
+    {
+      "sha256": "6B756DE188092DA6CC571D79D26A1F874A53FF5E5E16B1C61066DA469865D3CD",
+      "file": "verification.azure-gcp.network-v16.20261012.private.json"
+    },
+    {
+      "sha256": "558F0F756B19E7A8B86B4E87CC7C9704AD3F31248E18CD4B74E676B877343504",
+      "file": "verification.azure-gcp.node-pools-v9.20261010.private.json"
+    },
+    {
+      "sha256": "E7C1FB849131415C5A5D7104B3E2EA0AA95C04BDEF1DCDC11A7AB7D3EE458663",
+      "file": "verification.azure-gcp.original-metrics.20261012.private.json"
+    },
+    {
+      "sha256": "2D8BDCD3BE608C839BF09ACDDB7D091E202B5DAFFCE052195369F85C31E0C7A7",
+      "file": "verification.azure-gcp.original-scope.20261012.private.json"
+    },
+    {
+      "sha256": "4EBCDCA524E9978EBE4934F0C56C35A305FE995C1A7773E6A88D0358A533E319",
+      "file": "verification.azure.details-audit.20261012.private.json"
+    },
+    {
+      "sha256": "32EC1FD9551114EAA287C6E7EF2DABDE0653F05029D2767CBC29C3C6B7E6E533",
+      "file": "verification.azure.details-v18.20261012.private.json"
+    },
+    {
+      "sha256": "1272A6E48E42A2642B542B94E3527B3B0719D7C9A71606BAE6476186B11AD118",
+      "file": "verification.gcp.billing-reference-summary.20261012.private.json"
+    },
+    {
+      "sha256": "D308AA9F5C02F4AB491ED3C3189AC880BAA3C7B695810B4EEBC3E75B325BF626",
+      "file": "verification.gcp.billing-v18.20261012.private.json"
+    },
+    {
+      "sha256": "2C2F0EAD514CBE9645BE8A8F5D09632C2C0DA15DE356535FA5A53F7F8702C849",
+      "file": "verification.gcp.created-alert-mcp.20261012.private.json"
+    },
+    {
+      "sha256": "21EB87E1C9F98DC30DEF1666A56A70FA03FF7932BDB59CCEFAB66938980E743A",
+      "file": "verification.gcp.original-global-products.20261012.private.json"
+    }
+  ]
+}

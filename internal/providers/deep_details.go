@@ -92,7 +92,13 @@ func validateDeepDetailRequest(spec deepDetailSpec, request provider.NativeReque
 		return err
 	}
 	if request.PageToken != "" {
-		return &provider.Error{Code: "cursor_not_supported", Operation: spec.operation, Message: "service detail operations do not accept a cursor"}
+		if spec.domain == "live_pods" {
+			if _, err := podContinuation(request, ""); err != nil {
+				return err
+			}
+		} else {
+			return &provider.Error{Code: "cursor_not_supported", Operation: spec.operation, Message: "service detail operations do not accept a cursor"}
+		}
 	}
 	for _, name := range spec.required {
 		value, err := nativeLiteral(request.Params, name)

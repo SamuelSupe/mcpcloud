@@ -83,7 +83,7 @@ func (a *azureAdapter) Query(ctx context.Context, req provider.QueryRequest) (pr
 	default:
 		return provider.Page{}, unsupportedSource(req.Source, azureResourcesOperation)
 	}
-	if req.Region != "" && req.Region != "*" {
+	if req.Source != model.SourceIAM && req.Region != "" && req.Region != "*" {
 		query += fmt.Sprintf(" | where location =~ '%s'", escapeKQL(req.Region))
 	}
 	query += " | project id, name, type, location, subscriptionId, resourceGroup, tags, properties"

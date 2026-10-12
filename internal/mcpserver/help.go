@@ -186,7 +186,7 @@ func (s *Server) help(input HelpInput) (HelpOutput, error) {
 				{Tool: "cloud_schema", Purpose: "Discover the exact registered operation and closed parameter schema.", Arguments: schemaArgs},
 				{Tool: "cloud_native_read", Purpose: "Call the selected operation after replacing schema-derived placeholders.", Arguments: map[string]any{"profile": profile, "operation": "OPERATION_FROM_CLOUD_SCHEMA", "params": map[string]any{"REQUIRED_PARAMETER": "VALUE_FROM_USER_SCOPE"}}},
 			},
-			Rules:         []string{"Never invent an operation or parameter; both must come from cloud_schema.operations.", "Arbitrary URLs, HTTP methods, provider actions, raw queries, and write operations are rejected.", "Service detail operations return allow-listed normalized metadata and reject cursors."},
+			Rules:         []string{"Never invent an operation or parameter; both must come from cloud_schema.operations.", "Arbitrary URLs, HTTP methods, provider actions, raw queries, and write operations are rejected.", "Service detail operations return allow-listed metadata; accept cursors only where cloud_schema describes pagination."},
 			RelatedTopics: []string{"resources", "pagination", "security"},
 		}, nil
 	case "pagination":
@@ -196,7 +196,7 @@ func (s *Server) help(input HelpInput) (HelpOutput, error) {
 				{Name: "Initial query", Tool: "cloud_query", Arguments: map[string]any{"query": query, "page_size": 100}},
 				{Name: "Next query page", Tool: "cloud_query", Arguments: map[string]any{"cursor": "NEXT_CURSOR_FROM_PREVIOUS_RESULT"}},
 			},
-			Rules:         []string{"A cloud_query continuation accepts only cursor.", "Cursors are short-lived, process-local, and invalid after expiry or restart.", "Native inventory cursors are passed back through cloud_native_read; fixed service detail operations do not paginate."},
+			Rules:         []string{"A cloud_query continuation accepts only cursor.", "cloud_query cursors are short-lived, process-local, and invalid after expiry or restart.", "Pass native cursors back through cloud_native_read with the same request context; only operations described as paginated accept them."},
 			RelatedTopics: []string{"dsl", "native", "errors"},
 		}, nil
 	case "errors":
