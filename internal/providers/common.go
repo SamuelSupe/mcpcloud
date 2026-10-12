@@ -216,6 +216,9 @@ func baseRow(p model.Provider, profile, id, name, service, nativeType, region, a
 	if p == model.ProviderGCP {
 		domain, kind = classifyGCP(nativeType)
 	}
+	if p == model.ProviderAzure {
+		domain, kind = classifyAzure(nativeType)
+	}
 	scope := map[string]any{}
 	switch p {
 	case model.ProviderGCP:
