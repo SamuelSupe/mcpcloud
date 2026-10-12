@@ -216,7 +216,8 @@ func (a *gcpAdapter) configuredScopes() []string {
 }
 
 func (a *gcpAdapter) httpClient(ctx context.Context) (*http.Client, error) {
-	scopes := []string{"https://www.googleapis.com/auth/cloud-platform.read-only"}
+	// Cloud Asset requires cloud-platform; IAM still restricts the account to reads.
+	scopes := []string{"https://www.googleapis.com/auth/cloud-platform"}
 	var credentials *google.Credentials
 	var err error
 	if a.profile.Credential.Source == "env" {
@@ -236,6 +237,23 @@ func (a *gcpAdapter) httpClient(ctx context.Context) (*http.Client, error) {
 		return nil, &provider.Error{Code: "authentication_error", Operation: gcpResourcesOperation, Message: err.Error()}
 	}
 	return oauth2.NewClient(ctx, credentials.TokenSource), nil
+}
+
+func gcpRegionForLocation(location string) string {
+	index := strings.LastIndex(location, "-")
+	if index > 0 && len(location)-index == 2 && location[index+1] >= 'a' && location[index+1] <= 'z' && location[index-1] >= '0' && location[index-1] <= '9' {
+		return location[:index]
+	}
+	return location
+}
+
+func gcpProjectForScope(scope, reportedProject string) string {
+	// Project-scoped Cloud Asset responses use a numeric project number.
+	// The request is already restricted to the configured project ID.
+	if strings.HasPrefix(scope, "projects/") {
+		return strings.TrimPrefix(scope, "projects/")
+	}
+	return strings.TrimPrefix(reportedProject, "projects/")
 }
 
 type gcpResourceResponse struct {
@@ -290,7 +308,11 @@ func (a *gcpAdapter) searchResources(ctx context.Context, scope, region, pageTok
 			name = lastName(resource.Name)
 		}
 		service := gcpService(resource.AssetType)
-		row := baseRow(model.ProviderGCP, a.name, resource.Name, name, service, resource.AssetType, resource.Location, strings.TrimPrefix(resource.Project, "projects/"), now)
+		project := gcpProjectForScope(scope, resource.Project)
+		row := baseRow(model.ProviderGCP, a.name, resource.Name, name, service, resource.AssetType, gcpRegionForLocation(resource.Location), project, now)
+		if row["region"] != resource.Location {
+			row["zone"] = resource.Location
+		}
 		row["state"] = resource.State
 		tags := map[string]any{}
 		for k, v := range resource.Labels {
@@ -298,7 +320,7 @@ func (a *gcpAdapter) searchResources(ctx context.Context, scope, region, pageTok
 		}
 		row["tags"] = tags
 		scopeMap := row["scope"].(map[string]any)
-		scopeMap["project_id"] = strings.TrimPrefix(resource.Project, "projects/")
+		scopeMap["project_id"] = project
 		scopeMap["organization_id"] = strings.TrimPrefix(resource.Organization, "organizations/")
 		if parsed, err := time.Parse(time.RFC3339, resource.CreateTime); err == nil {
 			row["created_at"] = parsed.UTC().Format(time.RFC3339Nano)
@@ -308,6 +330,7 @@ func (a *gcpAdapter) searchResources(ctx context.Context, scope, region, pageTok
 		}
 		native := row["native"].(map[string]any)
 		native["asset_type"] = resource.AssetType
+		native["reported_project"] = resource.Project
 		native["description"] = resource.Description
 		native["folders"] = resource.Folders
 		rows = append(rows, row)
@@ -325,7 +348,8 @@ func (a *gcpAdapter) searchIAM(ctx context.Context, scope, pageToken string, lim
 	for _, result := range response.Results {
 		for _, binding := range result.Policy.Bindings {
 			for _, member := range binding.Members {
-				row := baseRow(model.ProviderGCP, a.name, result.Resource, lastName(result.Resource), "iam", result.AssetType, "", strings.TrimPrefix(result.Project, "projects/"), now)
+				project := gcpProjectForScope(scope, result.Project)
+				row := baseRow(model.ProviderGCP, a.name, result.Resource, lastName(result.Resource), "iam", result.AssetType, "", project, now)
 				row["domain"] = "iam"
 				row["kind"] = "binding"
 				row["id"] = result.Resource + "#" + binding.Role + "#" + member
@@ -335,7 +359,7 @@ func (a *gcpAdapter) searchIAM(ctx context.Context, scope, pageToken string, lim
 				row["roles"] = []string{binding.Role}
 				row["condition"] = binding.Condition
 				scopeMap := row["scope"].(map[string]any)
-				scopeMap["project_id"] = strings.TrimPrefix(result.Project, "projects/")
+				scopeMap["project_id"] = project
 				scopeMap["organization_id"] = strings.TrimPrefix(result.Organization, "organizations/")
 				native := row["native"].(map[string]any)
 				native["asset_type"] = result.AssetType

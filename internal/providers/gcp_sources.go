@@ -114,7 +114,17 @@ func (a *gcpAdapter) queryMetrics(ctx context.Context, scope string, req provide
 			if !ok {
 				continue
 			}
-			row := metricRow(model.ProviderGCP, a.name, selector.Raw, "monitoring", resourceID, stringValue(dimensions["resource.location"]), scope, timestamp, value, "", dimensions)
+			location := series.Resource.Labels["location"]
+			if location == "" {
+				location = series.Resource.Labels["region"]
+			}
+			if location == "" {
+				location = series.Resource.Labels["zone"]
+			}
+			row := metricRow(model.ProviderGCP, a.name, selector.Raw, "monitoring", resourceID, gcpRegionForLocation(location), scope, timestamp, value, "", dimensions)
+			if gcpRegionForLocation(location) != location {
+				row["zone"] = location
+			}
 			native := row["native"].(map[string]any)
 			native["metric_type"] = series.Metric.Type
 			native["resource_type"] = series.Resource.Type

@@ -82,6 +82,24 @@ type gcpGKEDetailResponse struct {
 }
 
 func (a *gcpAdapter) readDeepDetail(ctx context.Context, request provider.NativeRequest, spec deepDetailSpec) (provider.Page, error) {
+	if spec.domain == "backend_health" {
+		return a.readBackendHealth(ctx, request, spec)
+	}
+	if spec.domain == "objects" {
+		return a.readObjects(ctx, request, spec)
+	}
+	if spec.domain == "live_nodes" || spec.domain == "live_pods" {
+		return a.readLiveNodes(ctx, request, spec)
+	}
+	if spec.domain == "node_pool" {
+		return a.readNodePools(ctx, request, spec)
+	}
+	if spec.domain == "storage" {
+		return a.readStorageDetail(ctx, request, spec)
+	}
+	if spec.domain == "network" {
+		return a.readNetworkDetail(ctx, request, spec)
+	}
 	if err := validateDeepDetailRequest(spec, request); err != nil {
 		return provider.Page{}, err
 	}
