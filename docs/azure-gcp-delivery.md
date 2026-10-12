@@ -54,6 +54,10 @@ Live verification covers both clouds' test inventories, network details, actual 
 
 Azure's current classic Sponsorship subscription does not support the selected cost API and remains outside this delivery's live cost acceptance at the user's request. Other products, dimensions, private GKE endpoints, application-level health and invoice PDFs are not claimed by these checks.
 
+Azure inventories classify exact ARM resource types. VM scale sets are not ordinary VM rows, and workspaces or AI accounts are not alert rules. Enable `logging` in the candidate Azure services list to expose logging metadata. IAM is queried once at subscription scope because authorization resources have no regional location; explicit DSL region filters still apply afterward. The live audit reconciles 22 IAM rows with the native inventory. The subscription currently has no supported alert rules: an empty successful list confirms filtering but does not establish a positive alert-rule acceptance test.
+
+Logging operations expose resource metadata, not log-event bodies. IAM exposes supported authorization resources, not a full Entra directory or effective-access analysis. Node listing currently uses a fixed 500-item limit and rejects continuation, so larger cluster node inventories are not covered. Selected resource metrics are validated, not every Azure metric or resource product.
+
 Pod lists accept `page_size` up to 100. Return the cursor through `cloud_native_read` with identical profile, operation, region, params and page size. Expired snapshots must restart from the first page. Environment variables, Secret references, annotations and raw Pod specs are excluded from output.
 
 ## Rollback
