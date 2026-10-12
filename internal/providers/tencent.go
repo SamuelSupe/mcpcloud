@@ -37,6 +37,13 @@ func (a *tencentAdapter) Profile() string          { return a.name }
 func (a *tencentAdapter) Capabilities() []provider.Capability {
 	c := capabilities(model.ProviderTencent, tencentResourcesOperation, tencentMetricsOperation, tencentCostsOperation)
 	for i := range c {
+		if c[i].Source == model.SourceCosts && a.profile.Options["billing_source"] == "intl_partner_customer" {
+			c[i].Operations = []string{tencentPartnerCostsOperation}
+			c[i].Notes = "International partner customer billing statement; Business dimension, totalCost, daily; currency USD is configured, not returned by summary API"
+			if a.profile.Options["billing_currency"] != "USD" {
+				c[i].Status = "not_configured"
+			}
+		}
 		if c[i].Source == model.SourceResources && a.profile.Options["resource_mode"] == "direct" {
 			c[i].Operations = append([]string{tencentDirectResourcesOperation}, tencentDirectResourceOperations...)
 			c[i].Domains = []string{"compute", "database", "kubernetes", "network", "storage"}

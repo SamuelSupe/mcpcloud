@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -42,7 +43,7 @@ func (a *alibabaAdapter) Capabilities() []provider.Capability {
 	return c
 }
 func (a *alibabaAdapter) Operations() []provider.Operation {
-	operations := []provider.Operation{operation(alibabaResourcesOperation, model.ProviderAlibaba, "resourcecenter", "Search Alibaba Cloud Resource Center", map[string]any{"view": map[string]any{"type": "string"}, "resource_type": map[string]any{"type": "string"}, "resource_id": map[string]any{"type": "string"}, "resource_name": map[string]any{"type": "string"}, "resource_group_id": map[string]any{"type": "string"}, "region": map[string]any{"type": "string"}})}
+	operations := []provider.Operation{operation(alibabaResourcesOperation, model.ProviderAlibaba, "resourcecenter", "Search Alibaba Cloud Resource Center by resource group, region, or one tag key/value pair", map[string]any{"view": map[string]any{"type": "string"}, "resource_type": map[string]any{"type": "string"}, "resource_id": map[string]any{"type": "string"}, "resource_name": map[string]any{"type": "string"}, "resource_group_id": map[string]any{"type": "string"}, "tag_key": map[string]any{"type": "string"}, "tag_value": map[string]any{"type": "string"}, "region": map[string]any{"type": "string"}})}
 	operations = append(operations, nativeProductOperations(model.ProviderAlibaba, "resourcecenter")...)
 	operations = append(operations, instanceDetailOperations(model.ProviderAlibaba)...)
 	return append(operations, deepDetailOperations(model.ProviderAlibaba)...)
@@ -114,7 +115,35 @@ func (a *alibabaAdapter) NativeRead(ctx context.Context, req provider.NativeRequ
 			filters[key] = []string{value}
 		}
 	}
+	tagKey, err := nativeString(req.Params, "tag_key")
+	if err != nil {
+		return provider.Page{}, err
+	}
+	tagValue, err := nativeString(req.Params, "tag_value")
+	if err != nil {
+		return provider.Page{}, err
+	}
+	if tag, ok := alibabaTagFilter(tagKey, tagValue); ok {
+		filters["Tag"] = []string{tag}
+	}
 	return a.search(ctx, view, filters, req.PageToken, req.Limit)
+}
+
+// SearchResources accepts one Tag filter encoded as a JSON key/value object.
+// A key or value alone is valid upstream; we never interpolate either into JSON.
+func alibabaTagFilter(key, value string) (string, bool) {
+	if key == "" && value == "" {
+		return "", false
+	}
+	tag := map[string]string{}
+	if key != "" {
+		tag["key"] = key
+	}
+	if value != "" {
+		tag["value"] = value
+	}
+	encoded, _ := json.Marshal(tag)
+	return string(encoded), true
 }
 
 func (a *alibabaAdapter) client() (*aliresource.Client, error) {
@@ -164,7 +193,11 @@ func (a *alibabaAdapter) search(ctx context.Context, view string, filters map[st
 		items := make([]aliresource.SearchResourcesFilter, 0, len(filters))
 		for key, values := range filters {
 			values := append([]string(nil), values...)
-			items = append(items, aliresource.SearchResourcesFilter{Key: key, MatchType: "Equals", Value: &values})
+			matchType := "Equals"
+			if key == "Tag" {
+				matchType = "Contains"
+			}
+			items = append(items, aliresource.SearchResourcesFilter{Key: key, MatchType: matchType, Value: &values})
 		}
 		request.Filter = &items
 	}

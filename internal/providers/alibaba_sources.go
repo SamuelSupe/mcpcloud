@@ -99,7 +99,7 @@ func (a *alibabaAdapter) queryMetrics(ctx context.Context, req provider.QueryReq
 			}
 		}
 		resourceID := firstDimension(pointDimensions)
-		row := metricRow(model.ProviderAlibaba, a.name, selector.Raw, "cms", resourceID, req.Region, account, timestamp, value, "", pointDimensions)
+		row := metricRow(model.ProviderAlibaba, a.name, selector.Raw, "cms", resourceID, req.Region, account, timestamp, value, alibabaMetricUnit(selector.Parts[0], selector.Parts[1]), pointDimensions)
 		native := row["native"].(map[string]any)
 		native["namespace"] = selector.Parts[0]
 		native["metric_name"] = selector.Parts[1]
@@ -107,6 +107,16 @@ func (a *alibabaAdapter) queryMetrics(ctx context.Context, req provider.QueryReq
 		rows = append(rows, row)
 	}
 	return provider.Page{Rows: rows, NextToken: response.NextToken, Scanned: len(datapoints), Requests: 1}, nil
+}
+
+// alibabaMetricUnit preserves CloudMonitor's published unit without rescaling
+// values. Only exact namespace/metric pairs verified against
+// DescribeMetricMetaList are listed; unknown metrics retain an empty unit.
+func alibabaMetricUnit(namespace, metric string) string {
+	if namespace == "acs_ecs_dashboard" && metric == "CPUUtilization" {
+		return "%"
+	}
+	return ""
 }
 
 func (a *alibabaAdapter) cmsClient(region string) (*cms.Client, error) {

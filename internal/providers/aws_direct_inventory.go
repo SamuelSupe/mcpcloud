@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -12,13 +13,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 
 	"mcpcloud/internal/model"
 	"mcpcloud/internal/provider"
 )
 
 func awsDirectOperations() []provider.Operation {
-	names := []string{"ec2.describe_instances", "ec2.describe_volumes", "ec2.describe_vpcs", "ec2.describe_subnets", "ec2.describe_security_groups", "ec2.describe_addresses", "ec2.describe_nat_gateways", "rds.describe_db_instances", "eks.list_clusters", "elb.describe_load_balancers", "elbv2.describe_load_balancers", "s3.list_buckets"}
+	names := []string{"ec2.describe_instances", "ec2.describe_volumes", "ec2.describe_vpcs", "ec2.describe_subnets", "ec2.describe_security_groups", "ec2.describe_addresses", "ec2.describe_nat_gateways", "rds.describe_db_instances", "eks.list_clusters", "elb.describe_load_balancers", "elbv2.describe_load_balancers", "elbv2.describe_target_groups", "s3.list_buckets", "elasticache.describe_cache_clusters", "elasticache.describe_replication_groups", "ecs.list_clusters"}
 	ops := make([]provider.Operation, 0, len(names))
 	for _, name := range names {
 		service := strings.SplitN(name, ".", 2)[0]
@@ -28,6 +30,17 @@ func awsDirectOperations() []provider.Operation {
 		}
 		ops = append(ops, operation("aws."+name, model.ProviderAWS, service, description, map[string]any{}))
 	}
+	// These APIs deliberately require an exact resource identifier.  They do not
+	// accept arbitrary filters, endpoints, or provider actions.
+	ops = append(ops,
+		operation("aws.elbv2.describe_listeners", model.ProviderAWS, "elbv2", "List listeners for one ALB/NLB using its exact ARN; returns only safe listener metadata.", detailParameters("load_balancer_arn")),
+		operation("aws.elbv2.describe_target_health", model.ProviderAWS, "elbv2", "Read backend health for one target group; target addresses and ports are intentionally omitted.", detailParameters("target_group_arn")),
+		operation("aws.s3.get_bucket_configuration", model.ProviderAWS, "s3", "Read allow-listed bucket region, public-access, versioning, and lifecycle posture without listing objects or returning ACL principals.", detailParameters("bucket_name")),
+		operation("aws.ecs.list_services", model.ProviderAWS, "ecs", "List service ARNs for one exact ECS cluster; no task definition or environment values are returned.", detailParameters("cluster_arn")),
+		operation("aws.ecs.list_tasks", model.ProviderAWS, "ecs", "List task ARNs for one exact ECS cluster; no task overrides or environment values are returned.", detailParameters("cluster_arn")),
+		operation("aws.eks.list_nodegroups", model.ProviderAWS, "eks", "List nodegroup names for one exact EKS cluster.", detailParameters("cluster_name")),
+		operation("aws.eks.describe_nodegroup", model.ProviderAWS, "eks", "Read safe EKS nodegroup scaling and status metadata; no node IPs, labels, or kubeconfig.", detailParameters("cluster_name", "nodegroup_name")),
+	)
 	return ops
 }
 
@@ -37,6 +50,11 @@ func (a *awsAdapter) readDirectInventory(ctx context.Context, req provider.Nativ
 	}
 	if err := op.ValidateParams(req.Params); err != nil {
 		return fail(err.Error())
+	}
+	for name := range op.Parameters {
+		if _, err := awsDirectIdentifier(req, name); err != nil {
+			return provider.Page{}, err
+		}
 	}
 	region, err := exactDetailRegion(req.Region, a.profile.Regions, op.Name)
 	if err != nil {
@@ -63,9 +81,9 @@ func (a *awsAdapter) readDirectInventory(ctx context.Context, req provider.Nativ
 	if limit == 0 {
 		limit = 100
 	}
-	if op.Name == "aws.ec2.describe_addresses" {
+	if op.Name == "aws.ec2.describe_addresses" || op.Name == "aws.elbv2.describe_target_health" || op.Name == "aws.s3.get_bucket_configuration" || op.Name == "aws.eks.describe_nodegroup" {
 		if req.PageToken != "" {
-			return fail("DescribeAddresses does not accept a pagination token")
+			return fail("operation does not accept a pagination token")
 		}
 	} else if limit < min || limit > max {
 		return fail(fmt.Sprintf("page size must be between %d and %d", min, max))
@@ -75,6 +93,17 @@ func (a *awsAdapter) readDirectInventory(ctx context.Context, req provider.Nativ
 		return provider.Page{}, attributeInstanceDetailError(err, op.Name)
 	}
 	return a.fetchDirectInventory(ctx, cfg, req, region, account, int32(limit))
+}
+
+func awsDirectIdentifier(req provider.NativeRequest, key string) (string, error) {
+	value, err := nativeIdentifier(req.Params, key)
+	if err != nil {
+		return "", &provider.Error{Code: "invalid_parameter", Operation: req.Operation, Message: err.Error()}
+	}
+	if value == "" {
+		return "", &provider.Error{Code: "missing_parameter", Operation: req.Operation, Message: key + " is required"}
+	}
+	return value, nil
 }
 
 func (a *awsAdapter) fetchDirectInventory(ctx context.Context, cfg awsbase.Config, req provider.NativeRequest, region, account string, limit int32) (provider.Page, error) {
@@ -100,6 +129,8 @@ func (a *awsAdapter) fetchDirectInventory(ctx context.Context, cfg awsbase.Confi
 				}
 			}
 		}
+	case "aws.elasticache.describe_cache_clusters", "aws.elasticache.describe_replication_groups", "aws.ecs.list_clusters", "aws.ecs.list_services", "aws.ecs.list_tasks":
+		return a.fetchAWSRawService(ctx, cfg, req, region, account, limit)
 	case "aws.ec2.describe_volumes":
 		var out *ec2.DescribeVolumesOutput
 		out, err = client.DescribeVolumes(ctx, &ec2.DescribeVolumesInput{MaxResults: &limit, NextToken: token})
@@ -198,6 +229,44 @@ func (a *awsAdapter) fetchDirectInventory(ctx context.Context, cfg awsbase.Confi
 				page.Rows = append(page.Rows, row(name, "eks", "AWS::EKS::Cluster", "kubernetes", "cluster"))
 			}
 		}
+	case "aws.eks.list_nodegroups":
+		cluster, e := awsDirectIdentifier(req, "cluster_name")
+		if e != nil {
+			return provider.Page{}, e
+		}
+		out, e := eks.NewFromConfig(cfg).ListNodegroups(ctx, &eks.ListNodegroupsInput{ClusterName: &cluster, MaxResults: &limit, NextToken: token})
+		err = e
+		if err == nil {
+			page.NextToken = awsbase.ToString(out.NextToken)
+			for _, name := range out.Nodegroups {
+				r := row(name, "eks", "AWS::EKS::Nodegroup", "kubernetes", "nodegroup")
+				r["attributes"] = map[string]any{"cluster_name": cluster}
+				page.Rows = append(page.Rows, r)
+			}
+		}
+	case "aws.eks.describe_nodegroup":
+		cluster, e := awsDirectIdentifier(req, "cluster_name")
+		if e != nil {
+			return provider.Page{}, e
+		}
+		name, e := awsDirectIdentifier(req, "nodegroup_name")
+		if e != nil {
+			return provider.Page{}, e
+		}
+		out, e := eks.NewFromConfig(cfg).DescribeNodegroup(ctx, &eks.DescribeNodegroupInput{ClusterName: &cluster, NodegroupName: &name})
+		err = e
+		if err == nil && out.Nodegroup != nil {
+			r := row(name, "eks", "AWS::EKS::Nodegroup", "kubernetes", "nodegroup")
+			r["state"] = string(out.Nodegroup.Status)
+			a := map[string]any{"cluster_name": cluster, "instance_types": out.Nodegroup.InstanceTypes, "capacity_type": string(out.Nodegroup.CapacityType)}
+			if out.Nodegroup.ScalingConfig != nil {
+				a["min_size"] = awsbase.ToInt32(out.Nodegroup.ScalingConfig.MinSize)
+				a["max_size"] = awsbase.ToInt32(out.Nodegroup.ScalingConfig.MaxSize)
+				a["desired_size"] = awsbase.ToInt32(out.Nodegroup.ScalingConfig.DesiredSize)
+			}
+			r["attributes"] = a
+			page.Rows = append(page.Rows, r)
+		}
 	case "aws.elb.describe_load_balancers":
 		var out *elasticloadbalancing.DescribeLoadBalancersOutput
 		out, err = elasticloadbalancing.NewFromConfig(cfg).DescribeLoadBalancers(ctx, &elasticloadbalancing.DescribeLoadBalancersInput{PageSize: &limit, Marker: token})
@@ -224,6 +293,57 @@ func (a *awsAdapter) fetchDirectInventory(ctx context.Context, cfg awsbase.Confi
 				page.Rows = append(page.Rows, r)
 			}
 		}
+	case "aws.elbv2.describe_listeners":
+		arn, e := awsDirectIdentifier(req, "load_balancer_arn")
+		if e != nil {
+			return provider.Page{}, e
+		}
+		var out *elasticloadbalancingv2.DescribeListenersOutput
+		out, err = elasticloadbalancingv2.NewFromConfig(cfg).DescribeListeners(ctx, &elasticloadbalancingv2.DescribeListenersInput{LoadBalancerArn: &arn, PageSize: &limit, Marker: token})
+		if err == nil {
+			page.NextToken = awsbase.ToString(out.NextMarker)
+			for _, v := range out.Listeners {
+				id := awsbase.ToString(v.ListenerArn)
+				r := row(id, "elasticloadbalancingv2", "AWS::ElasticLoadBalancingV2::Listener", "network", "listener")
+				r["state"] = string(v.Protocol)
+				r["attributes"] = map[string]any{"load_balancer_arn": arn, "port": awsbase.ToInt32(v.Port), "protocol": string(v.Protocol), "default_action_count": len(v.DefaultActions)}
+				page.Rows = append(page.Rows, r)
+			}
+		}
+	case "aws.elbv2.describe_target_groups":
+		var out *elasticloadbalancingv2.DescribeTargetGroupsOutput
+		out, err = elasticloadbalancingv2.NewFromConfig(cfg).DescribeTargetGroups(ctx, &elasticloadbalancingv2.DescribeTargetGroupsInput{PageSize: &limit, Marker: token})
+		if err == nil {
+			page.NextToken = awsbase.ToString(out.NextMarker)
+			for _, v := range out.TargetGroups {
+				id := awsbase.ToString(v.TargetGroupArn)
+				r := row(id, "elasticloadbalancingv2", "AWS::ElasticLoadBalancingV2::TargetGroup", "network", "target_group")
+				r["name"] = awsbase.ToString(v.TargetGroupName)
+				r["attributes"] = map[string]any{"protocol": string(v.Protocol), "port": awsbase.ToInt32(v.Port), "target_type": string(v.TargetType), "vpc_id": awsbase.ToString(v.VpcId), "health_check_enabled": awsbase.ToBool(v.HealthCheckEnabled), "health_check_protocol": string(v.HealthCheckProtocol)}
+				page.Rows = append(page.Rows, r)
+			}
+		}
+	case "aws.elbv2.describe_target_health":
+		arn, e := awsDirectIdentifier(req, "target_group_arn")
+		if e != nil {
+			return provider.Page{}, e
+		}
+		var out *elasticloadbalancingv2.DescribeTargetHealthOutput
+		out, err = elasticloadbalancingv2.NewFromConfig(cfg).DescribeTargetHealth(ctx, &elasticloadbalancingv2.DescribeTargetHealthInput{TargetGroupArn: &arn})
+		if err == nil {
+			for index, v := range out.TargetHealthDescriptions {
+				// IDs may be private IP addresses. Keep the stable ordinal scoped to the target group instead.
+				id := fmt.Sprintf("%s#%d", arn, index)
+				r := row(id, "elasticloadbalancingv2", "AWS::ElasticLoadBalancingV2::TargetHealth", "network", "target_health")
+				state, reason := "", ""
+				if v.TargetHealth != nil {
+					state, reason = string(v.TargetHealth.State), string(v.TargetHealth.Reason)
+				}
+				r["state"] = state
+				r["attributes"] = map[string]any{"target_group_arn": arn, "health_reason": reason}
+				page.Rows = append(page.Rows, r)
+			}
+		}
 	case "aws.s3.list_buckets":
 		var out *s3.ListBucketsOutput
 		out, err = s3.NewFromConfig(cfg).ListBuckets(ctx, &s3.ListBucketsInput{MaxBuckets: &limit, ContinuationToken: token, BucketRegion: &region})
@@ -240,6 +360,64 @@ func (a *awsAdapter) fetchDirectInventory(ctx context.Context, cfg awsbase.Confi
 				page.Rows = append(page.Rows, r)
 			}
 		}
+	case "aws.s3.get_bucket_configuration":
+		bucket, e := awsDirectIdentifier(req, "bucket_name")
+		if e != nil {
+			return provider.Page{}, e
+		}
+		s3client := s3.NewFromConfig(cfg)
+		location, e := s3client.GetBucketLocation(ctx, &s3.GetBucketLocationInput{Bucket: &bucket})
+		if e != nil {
+			err = e
+			break
+		}
+		versioning, e := s3client.GetBucketVersioning(ctx, &s3.GetBucketVersioningInput{Bucket: &bucket})
+		if e != nil {
+			err = e
+			break
+		}
+		block, e := s3client.GetPublicAccessBlock(ctx, &s3.GetPublicAccessBlockInput{Bucket: &bucket})
+		if e != nil && !awsS3OptionalConfigurationError(e, "NoSuchPublicAccessBlockConfiguration") {
+			err = e
+			break
+		}
+		lifecycle, e := s3client.GetBucketLifecycleConfiguration(ctx, &s3.GetBucketLifecycleConfigurationInput{Bucket: &bucket})
+		if e != nil && !awsS3OptionalConfigurationError(e, "NoSuchLifecycleConfiguration") {
+			err = e
+			break
+		}
+		acl, e := s3client.GetBucketAcl(ctx, &s3.GetBucketAclInput{Bucket: &bucket})
+		if e != nil {
+			err = e
+			break
+		}
+		publicACL := false
+		for _, grant := range acl.Grants {
+			if grant.Grantee != nil && (strings.Contains(awsbase.ToString(grant.Grantee.URI), "AllUsers") || strings.Contains(awsbase.ToString(grant.Grantee.URI), "AuthenticatedUsers")) {
+				publicACL = true
+			}
+		}
+		attributes := map[string]any{"public_acl": publicACL, "lifecycle_rule_count": 0}
+		if location != nil {
+			attributes["region"] = string(location.LocationConstraint)
+		}
+		if versioning != nil {
+			attributes["versioning"] = string(versioning.Status)
+			attributes["mfa_delete"] = string(versioning.MFADelete)
+		}
+		if lifecycle != nil {
+			attributes["lifecycle_rule_count"] = len(lifecycle.Rules)
+		}
+		if block != nil && block.PublicAccessBlockConfiguration != nil {
+			b := block.PublicAccessBlockConfiguration
+			attributes["block_public_acls"] = awsbase.ToBool(b.BlockPublicAcls)
+			attributes["ignore_public_acls"] = awsbase.ToBool(b.IgnorePublicAcls)
+			attributes["block_public_policy"] = awsbase.ToBool(b.BlockPublicPolicy)
+			attributes["restrict_public_buckets"] = awsbase.ToBool(b.RestrictPublicBuckets)
+		}
+		r := row(bucket, "s3", "AWS::S3::Bucket", "storage", "bucket")
+		r["attributes"] = attributes
+		page.Rows = append(page.Rows, r)
 	default:
 		return provider.Page{}, &provider.Error{Code: "operation_not_allowed", Operation: req.Operation, Message: "operation is not registered"}
 	}
@@ -248,4 +426,9 @@ func (a *awsAdapter) fetchDirectInventory(ctx context.Context, cfg awsbase.Confi
 	}
 	page.Scanned = len(page.Rows)
 	return page, nil
+}
+
+func awsS3OptionalConfigurationError(err error, code string) bool {
+	var apiErr smithy.APIError
+	return errors.As(err, &apiErr) && apiErr.ErrorCode() == code
 }

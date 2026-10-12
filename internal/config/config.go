@@ -220,13 +220,19 @@ func validateOptions(name string, provider model.Provider, options map[string]st
 		model.ProviderAzure:      {},
 		model.ProviderAlibaba:    {"resource_view": true},
 		model.ProviderHuawei:     {"billing_site": true},
-		model.ProviderTencent:    {"resource_view_id": true, "billing_currency": true, "resource_mode": true},
+		model.ProviderTencent:    {"resource_view_id": true, "billing_currency": true, "resource_mode": true, "billing_source": true},
 		model.ProviderVolcengine: {},
 	}
 	if provider == model.ProviderTencent && options["resource_mode"] == "direct" && options["resource_view_id"] != "" {
 		return fmt.Errorf("profile %q direct resources cannot use resource_view_id", name)
 	}
+	if provider == model.ProviderTencent && options["billing_source"] == "intl_partner_customer" && options["billing_currency"] != "USD" {
+		return fmt.Errorf("profile %q international partner customer billing requires explicit billing_currency USD", name)
+	}
 	for key, value := range options {
+		if provider == model.ProviderTencent && key == "billing_source" && value != "billing" && value != "intl_partner_customer" {
+			return fmt.Errorf("profile %q billing_source must be billing or intl_partner_customer", name)
+		}
 		if provider == model.ProviderTencent && key == "resource_mode" && value != "direct" && value != "cloudrc" {
 			return fmt.Errorf("profile %q resource_mode must be direct or cloudrc", name)
 		}
