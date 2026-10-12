@@ -29,7 +29,7 @@ func (a *scopedAdapter) ConfiguredRegions() []string {
 }
 
 // TargetRegions returns the regions that require separate provider calls. Cost
-// APIs and GCP's global IAM/Monitoring endpoints are queried once; the engine
+// APIs, Azure/GCP IAM, and GCP Monitoring are queried once; the engine
 // applies an explicit DSL region scope to their normalized rows afterward.
 func (a *scopedAdapter) TargetRegions(source model.Source, requested []string) ([]string, error) {
 	for _, region := range requested {
@@ -37,7 +37,7 @@ func (a *scopedAdapter) TargetRegions(source model.Source, requested []string) (
 			return nil, err
 		}
 	}
-	if source == model.SourceCosts || (a.Provider() == model.ProviderGCP && (source == model.SourceIAM || source == model.SourceMetrics)) {
+	if source == model.SourceCosts || ((a.Provider() == model.ProviderAzure || a.Provider() == model.ProviderGCP) && source == model.SourceIAM) || (a.Provider() == model.ProviderGCP && source == model.SourceMetrics) {
 		return []string{""}, nil
 	}
 
