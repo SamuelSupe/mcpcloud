@@ -1,6 +1,6 @@
 # Azure/GCP candidate delivery and rollback
 
-This branch combines the validated Azure/GCP candidate with delivery baseline `eb600d6cacfde14454d746327fea1937300690fc`. It remains a local review candidate. The original deployed binary/configuration is retained; no push or production replacement is implied by this document.
+This change combines the validated Azure/GCP implementation with delivery baseline `eb600d6cacfde14454d746327fea1937300690fc`. The original deployed binary/configuration is retained. A repository merge does not replace a running deployment. The [final acceptance record](validation/azure-gcp/20261012/README.md) distinguishes functional acceptance, deferred Azure costs, optional extensions and incomplete audit evidence.
 
 ## Build and verification
 
@@ -29,8 +29,8 @@ For GCP costs, configure the standard export table separately from the query-job
 
 ```yaml
 options:
-  billing_table: billingexport-438818.billing_data.gcp_billing_export_v1_01FBDE_1AC342_AE7E4E
-  billing_project: studio-storage-integration
+  billing_table: YOUR_BILLING_EXPORT_PROJECT_ID.billing_data.YOUR_STANDARD_BILLING_TABLE
+  billing_project: YOUR_GCP_PROJECT_ID
   billing_location: US
 ```
 
@@ -54,7 +54,7 @@ Live verification covers both clouds' test inventories, network details, actual 
 
 Azure's current classic Sponsorship subscription does not support the selected cost API and remains outside this delivery's live cost acceptance at the user's request. Other products, dimensions, private GKE endpoints, application-level health and invoice PDFs are not claimed by these checks.
 
-Azure inventories classify exact ARM resource types. VM scale sets are not ordinary VM rows, and workspaces or AI accounts are not alert rules. Enable `logging` in the candidate Azure services list to expose logging metadata. IAM is queried once at subscription scope because authorization resources have no regional location; explicit DSL region filters still apply afterward. The live audit reconciles 22 IAM rows with the native inventory. The subscription currently has no supported alert rules: an empty successful list confirms filtering but does not establish a positive alert-rule acceptance test.
+Azure inventories classify exact ARM resource types. VM scale sets are not ordinary VM rows, and workspaces or AI accounts are not alert rules. Enable `logging` in the Azure services list to expose logging metadata. IAM is queried once at subscription scope because authorization resources have no regional location; explicit DSL region filters still apply afterward. Live verification reconciles 22 IAM rows with the native inventory. Both clouds' alert inventories now have positive acceptance using user-authorized disabled test rules with no notification targets. Azure metric alerts have ARM location `global`; the [monitoring-only example](validation/azure-gcp/20261012/alerts.example.yaml) permits this location separately from the regional metrics profile. Use the intended profile/configuration instead of expecting a region-restricted inventory to include global resources.
 
 Logging operations expose resource metadata, not log-event bodies. IAM exposes supported authorization resources, not a full Entra directory or effective-access analysis. Node listing currently uses a fixed 500-item limit and rejects continuation, so larger cluster node inventories are not covered. Selected resource metrics are validated, not every Azure metric or resource product.
 

@@ -1,0 +1,27 @@
+{
+  "candidate": "v18",
+  "config": "config.azure-gcp.alerts-20261012.yaml",
+  "port": 8122,
+  "originalBinaryUnchanged": true,
+  "azure": {
+    "region": "global",
+    "pages": 1,
+    "positiveAcceptancePassed": true,
+    "mcpRows": 1,
+    "notificationActions": 0,
+    "disabled": true,
+    "originalIdentityDirectRead": true
+  },
+  "gcp": {
+    "notificationChannels": 0,
+    "continuationRecoveredAfterTimeout": true,
+    "pages": 8,
+    "positiveAcceptancePassed": true,
+    "mcpRows": 1,
+    "disabled": true,
+    "originalIdentityDirectRead": true
+  },
+  "originalNativeOperationsWithPositiveSample": 27,
+  "azureBilling": "deferred",
+  "triggerAndNotificationTested": false
+}
