@@ -122,6 +122,9 @@ func (a *alibabaAdapter) readDeepDetail(ctx context.Context, request provider.Na
 	if err != nil {
 		return provider.Page{}, err
 	}
+	if spec.domain == "oss_depth" {
+		return a.readOSSDepth(ctx, request, spec, account, region)
+	}
 	if spec.operation == alibabaACKMonitoringOperation {
 		return a.alibabaACKMonitoring(ctx, spec, request, account, region)
 	}
