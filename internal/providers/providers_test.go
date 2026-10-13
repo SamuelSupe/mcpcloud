@@ -1296,7 +1296,7 @@ func TestDeepDetailCatalogRegistersClosedOperationsAndCapabilities(t *testing.T)
 			want += len(gcpNetworkTypes) + 7
 		}
 		if adapter.Provider() == model.ProviderAlibaba {
-			want = 5
+			want = 9
 		}
 		if adapter.Provider() == model.ProviderVolcengine {
 			want = 4
@@ -1348,7 +1348,7 @@ func TestDeepDetailCatalogRegistersClosedOperationsAndCapabilities(t *testing.T)
 			}
 		}
 	}
-	want := len(model.Providers)*2 + 17 + len(azureNetworkTypes) + len(gcpNetworkTypes)
+	want := len(model.Providers)*2 + 21 + len(azureNetworkTypes) + len(gcpNetworkTypes)
 	if len(seen) != want {
 		t.Fatalf("deep detail operation count = %d, want %d", len(seen), want)
 	}

@@ -27,7 +27,10 @@ func Validate(q Query) error {
 			return fmt.Errorf("metrics range cannot exceed 31 days")
 		}
 		if q.Step != 0 && q.Step < time.Minute {
-			return fmt.Errorf("metrics step cannot be shorter than 1m")
+			seconds := q.Step == 5*time.Second || q.Step == 10*time.Second
+			if !seconds || len(q.Scope.Providers) != 1 || q.Scope.Providers[0] != model.ProviderTencent {
+				return fmt.Errorf("metrics step cannot be shorter than 1m unless explicitly scoped to provider tencent with step 5s or 10s")
+			}
 		}
 		if q.Step > q.Range.End.Sub(q.Range.Start) {
 			return fmt.Errorf("metrics step cannot exceed the query range")
