@@ -1,0 +1,40 @@
+{
+  "evidence_hashes": [
+    {
+      "sha256": "D13F46974721372807BF0FE904BDFBEBFF3E4D8B524900D74C20498956821DDA",
+      "file": "verification.azure-gcp.demo-alerts-summary.20261013.json"
+    },
+    {
+      "sha256": "59BD619DCE52C8C3FF4E66482488E9B4DC1E863EBE9521CB96DEE6D3B424031F",
+      "file": "verification.gcp.capacity-followup-summary.20261012.json"
+    },
+    {
+      "sha256": "B93BC51A5FF317CF37E82634F0C50447B0B5F3A7B4EF32D5263A0D43609F9067",
+      "file": "verification.gcp.global-acceptance-summary.20261013.json"
+    }
+  ],
+  "completed_extensions": [
+    "object metadata",
+    "Pod status and pagination",
+    "GCP new test bucket capacity",
+    "GCP global backend details and health"
+  ],
+  "remaining_conditions": {
+    "complete_cloud_audit": "incomplete: service logging coverage and organization configuration not fully verified",
+    "azure_costs": "deferred: current classic Sponsorship unsupported"
+  },
+  "credentials_published": false,
+  "production_replaced": false,
+  "date": "2026-10-13",
+  "optional_extensions": [
+    "Node continuation"
+  ],
+  "code_baseline_commit": "98efca15527d7c01eafab22bb92b2e9df371b3c1",
+  "functional_review_ready": true,
+  "formal_acceptance_signed": false,
+  "original_native_operations": {
+    "azure": 13,
+    "gcp": 14,
+    "passed": 27
+  }
+}

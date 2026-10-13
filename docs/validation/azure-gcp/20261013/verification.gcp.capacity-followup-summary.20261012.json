@@ -1,0 +1,12 @@
+{
+  "capacity_bytes": 1024,
+  "observed_at": "2026-10-12T10:06:28.9839072Z",
+  "mcp_points": 3,
+  "cloud_changes": false,
+  "object_bytes": 1024,
+  "pagination_complete": true,
+  "point_by_point_match": true,
+  "test_bucket_capacity_verified": true,
+  "object_count": 2,
+  "native_aligned_points": 3
+}

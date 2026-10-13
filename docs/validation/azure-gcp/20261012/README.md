@@ -1,5 +1,7 @@
 # Azure/GCP functional acceptance — 2026-10-12
 
+Latest status: [2026-10-13 acceptance follow-up](../20261013/README.md). The new test bucket capacity and global backend live acceptance gaps have now been closed; this directory retains the original validation snapshot.
+
 The validated implementation covers the agreed Azure non-cost functions and GCP functions, including real BigQuery billing queries. All 27 original native operations have positive live samples (Azure 13, GCP 14), with selected metrics, network associations, Ready Nodes and regional backend health verified. This is representative acceptance, not exhaustive coverage of all cloud products or metrics.
 
 - [Final function record](AZURE-GCP-ORIGINAL-FUNCTIONS-FINAL-20261012.md)
@@ -10,7 +12,7 @@ The validated implementation covers the agreed Azure non-cost functions and GCP 
 
 Azure cost acceptance is deferred because the tested classic Sponsorship subscription does not support the selected APIs. Complete cross-service cloud audit reconciliation remains incomplete; existing BigQuery audit evidence does not establish coverage for every service. These conditions are recorded rather than marked passed.
 
-The new GCP test bucket's nonzero capacity series, global backend live samples and optional Node continuation are tracked separately. No 500-node cluster was created. Alert rules are disabled metadata fixtures; alert firing and notification delivery are not claimed.
+The new GCP test bucket's nonzero capacity series and global backend live samples were separate gaps at this snapshot and passed in the linked follow-up. Node continuation remains an optional unimplemented extension. Alert rules are disabled metadata fixtures; alert firing and notification delivery are not claimed.
 
 The two configuration examples require replacing `YOUR_*` placeholders. [original-scope.example.yaml](original-scope.example.yaml) uses port 8121 for resource/detail/metric reads; [alerts.example.yaml](alerts.example.yaml) uses port 8122 with monitoring-only profiles, including Azure `global`. Both load credentials from external environment/file settings. Do not commit credentials or a bearer token.
 
