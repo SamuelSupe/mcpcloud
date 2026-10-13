@@ -1,0 +1,31 @@
+{
+  "corrected_harness_assumption": "Existing nginx returns mcpcloud validation, not the default nginx welcome page",
+  "mcp_detail_rows": 1,
+  "original_mcp_read_identity": true,
+  "original_delivery_replaced": false,
+  "desktop_mcp_call": true,
+  "iam_changed": false,
+  "new_vm": false,
+  "global_health": "HEALTHY",
+  "source_changed": false,
+  "regional_health": "HEALTHY",
+  "independent_reference_matched": true,
+  "observed_at": "2026-10-13T02:32:21.8168951Z",
+  "http_checks": [
+    {
+      "scope": "global",
+      "status": 200,
+      "validation_body_matched": true,
+      "server_nginx": true
+    },
+    {
+      "scope": "regional",
+      "status": 200,
+      "validation_body_matched": true,
+      "server_nginx": true
+    }
+  ],
+  "mcp_health_rows": 1,
+  "global_details_passed": true,
+  "unused_new_group_removed": true
+}

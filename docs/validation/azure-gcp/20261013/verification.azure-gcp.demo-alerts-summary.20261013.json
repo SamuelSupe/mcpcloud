@@ -1,0 +1,16 @@
+[
+  {
+    "pagination_complete": true,
+    "requests": 1,
+    "status": "ok",
+    "provider": "azure",
+    "rules": 1
+  },
+  {
+    "pagination_complete": true,
+    "requests": 8,
+    "status": "ok",
+    "provider": "gcp",
+    "rules": 1
+  }
+]
