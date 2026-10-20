@@ -1,0 +1,6 @@
+# Startup/client smoke check only. No cloud profiles, credentials or cloud calls.
+# Copy config.example.yaml to config.yaml and configure your own scopes for use.
+profiles: {}
+server:
+  listen: 127.0.0.1:8080
+  auth_token_env: MCPCLOUD_AUTH_TOKEN

@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"mcpcloud/internal/buildinfo"
 	"mcpcloud/internal/config"
 	"mcpcloud/internal/engine"
 	"mcpcloud/internal/mcpserver"
@@ -30,9 +31,11 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: mcpcloud <serve|validate-config|probe-profile> [options]")
+		return errors.New("usage: mcpcloud <version|serve|validate-config|probe-profile> [options]")
 	}
 	switch args[0] {
+	case "version", "--version", "-version":
+		return showVersion(args[1:])
 	case "serve":
 		return serve(args[1:])
 	case "validate-config":
@@ -42,6 +45,23 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
+}
+
+func showVersion(args []string) error {
+	flags := flag.NewFlagSet("version", flag.ContinueOnError)
+	asJSON := flags.Bool("json", false, "print build information as JSON")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 {
+		return errors.New("usage: mcpcloud version [--json]")
+	}
+	info := buildinfo.Current()
+	if *asJSON {
+		return json.NewEncoder(os.Stdout).Encode(info)
+	}
+	fmt.Printf("mcpcloud %s (%s/%s, %s, commit %s, built %s)\n", info.Version, info.OS, info.Arch, info.GoVersion, info.Commit, info.BuildTime)
+	return nil
 }
 
 func probeProfile(args []string) error {

@@ -1,0 +1,5 @@
+/dist/
+/mcpcloud
+/mcpcloud.exe
+/config.yaml
+*.credentials.env
