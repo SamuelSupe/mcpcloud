@@ -17,6 +17,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"mcpcloud/internal/buildinfo"
 	"mcpcloud/internal/config"
 	"mcpcloud/internal/engine"
 	"mcpcloud/internal/model"
@@ -109,7 +110,7 @@ func New(cfg config.Config, registry *provider.Registry, logger *slog.Logger) *S
 		probeTimeout = cfg.Limits.MaxTimeout
 	}
 	s := &Server{cfg: cfg, registry: registry, engine: queryEngine, probe: probeRunner, readiness: probe.NewCoordinator(probeRunner, time.Minute, probeTimeout), logger: logger}
-	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "mcpcloud", Version: "0.1.0"}, &mcp.ServerOptions{Logger: logger})
+	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "mcpcloud", Version: buildinfo.Version}, &mcp.ServerOptions{Logger: logger})
 	s.addTools()
 	return s
 }
