@@ -108,11 +108,46 @@ func build() error {
 		}
 		shared = append(shared, entry{destination, b, 0644})
 	}
-	modules, err := command(*goTool, "list", "-m", "-f", "{{.Path}} {{.Version}}", "all")
+	// Query packages linked into this executable, not unrelated modules in the
+	// complete module graph. Include the dependencies' distribution notices.
+	modules, err := command(*goTool, "list", "-deps", "-f", "{{if .Module}}{{.Module.Path}}|{{.Module.Version}}|{{.Module.Dir}}{{end}}", "./cmd/mcpcloud")
 	if err != nil {
 		return err
 	}
-	shared = append(shared, entry{"DEPENDENCIES.txt", []byte(modules + "\n"), 0644})
+	seen := map[string]bool{}
+	var names []string
+	var notices []entry
+	for _, line := range strings.Split(modules, "\n") {
+		parts := strings.Split(strings.TrimSpace(line), "|")
+		if len(parts) != 3 || parts[0] == "mcpcloud" || seen[parts[0]] {
+			continue
+		}
+		seen[parts[0]] = true
+		names = append(names, parts[0]+" "+parts[1])
+		files, err := os.ReadDir(parts[2])
+		if err != nil {
+			return err
+		}
+		found := false
+		for _, file := range files {
+			upper := strings.ToUpper(file.Name())
+			if file.IsDir() || !(strings.HasPrefix(upper, "LICENSE") || strings.HasPrefix(upper, "COPYING") || strings.HasPrefix(upper, "NOTICE")) {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(parts[2], file.Name()))
+			if err != nil {
+				return err
+			}
+			notices = append(notices, entry{"licenses/" + parts[0] + "@" + parts[1] + "/" + file.Name(), data, 0644})
+			found = true
+		}
+		if !found {
+			return fmt.Errorf("dependency license not found: %s", parts[0])
+		}
+	}
+	sort.Strings(names)
+	shared = append(shared, entry{"DEPENDENCIES.txt", []byte(strings.Join(names, "\n") + "\n"), 0644})
+	shared = append(shared, notices...)
 	shared = append(shared, entry{"README.md", []byte("# MCPCloud " + *version + "\n\n安装与使用说明：docs/install.zh-CN.md\n\n本包不含云凭证或已启用的云账号配置。源码提交：" + commit + "。\n"), 0644})
 	var artifacts []artifact
 	for _, target := range []struct{ os, arch string }{{"windows", "amd64"}, {"linux", "amd64"}, {"linux", "arm64"}} {
