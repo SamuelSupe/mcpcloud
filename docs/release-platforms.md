@@ -6,11 +6,14 @@
 
 | 平台 | 架构名对应 | 本次提供 |
 | --- | --- | --- |
-| Windows amd64 | x86_64 / Intel 64 / AMD64 | ZIP，原生 Windows 启动验证 |
-| Linux amd64 | x86_64 | TAR.GZ，WSL Linux 启动验证 |
-| Linux arm64 | aarch64 | TAR.GZ，QEMU 用户态仿真启动验证；未替代 ARM 实机验收 |
+| Windows amd64 | x86_64 / Intel 64 / AMD64 | ZIP，Windows Server 2025 虚拟机启动验证 |
+| Windows arm64 | ARM64 / Qualcomm Snapdragon 等 | ZIP，Windows 11 ARM64 虚拟机启动验证 |
+| Linux amd64 | x86_64 | TAR.GZ，Ubuntu 24.04 x86_64 虚拟机启动验证 |
+| Linux arm64 | aarch64 | TAR.GZ，Ubuntu 24.04 ARM64 虚拟机启动验证 |
 
-先覆盖常用 64 位客户端和服务器。Windows ARM64、386、ARMv7、macOS 暂无明确目标环境，本次不追加这些包。Go 编译成功与启动验证分别记录；仿真通过不声明已在所有 ARM 服务器或 Linux 发行版实测。
+v0.1.1 覆盖上述四种 64 位平台，386、ARMv7、macOS 暂未提供。amd64 同时适用于 Intel 和 AMD，不是 AMD 专用版。四种包使用 GitHub 托管的匹配架构虚拟机，不使用 QEMU；不声明覆盖所有服务器型号和系统版本。v0.1.0 的 Windows 本机、Linux WSL / QEMU 历史验证结果仍按原口径保留。
+
+[GitHub 标准运行器](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)提供 `windows-2025`、`windows-11-arm`、`ubuntu-24.04`、`ubuntu-24.04-arm`。公开仓库使用标准运行器免费。本工作流只用这些运行器，不启用 larger runner 或注入云凭证。
 
 ## 官方文档与镜像核对
 

@@ -1,4 +1,4 @@
-// Build the three native release archives without reading deployment credentials.
+// Build the four native release archives without reading deployment credentials.
 package main
 
 import (
@@ -151,7 +151,7 @@ func build() error {
 	shared = append(shared, notices...)
 	shared = append(shared, entry{"README.md", []byte("# MCPCloud " + *version + "\n\n安装与使用说明：docs/install.zh-CN.md\n\n本包不含云凭证或已启用的云账号配置。源码提交：" + commit + "。\n"), 0644})
 	var artifacts []artifact
-	for _, target := range []struct{ os, arch string }{{"windows", "amd64"}, {"linux", "amd64"}, {"linux", "arm64"}} {
+	for _, target := range []struct{ os, arch string }{{"windows", "amd64"}, {"windows", "arm64"}, {"linux", "amd64"}, {"linux", "arm64"}} {
 		name := "mcpcloud_" + *version + "_" + target.os + "_" + target.arch
 		work := filepath.Join(*out, "work", target.os+"_"+target.arch)
 		if err := os.MkdirAll(work, 0755); err != nil {
