@@ -6,34 +6,35 @@ MCPCloud 为 MCP 客户端提供七云资源、服务详情、监控和费用查
 
 | 系统 / 架构 | 程序包 | 适用设备 |
 | --- | --- | --- |
-| Windows amd64 | `mcpcloud_v0.1.0_windows_amd64.zip` | Intel / AMD 64 位 Windows |
-| Linux amd64 | `mcpcloud_v0.1.0_linux_amd64.tar.gz` | x86_64 Linux 服务器 |
-| Linux arm64 | `mcpcloud_v0.1.0_linux_arm64.tar.gz` | aarch64 Linux 服务器 |
+| Windows amd64 | `mcpcloud_v0.1.1_windows_amd64.zip` | Intel / AMD 64 位 Windows |
+| Windows arm64 | `mcpcloud_v0.1.1_windows_arm64.zip` | 高通 Snapdragon 等 ARM64 Windows 设备 |
+| Linux amd64 | `mcpcloud_v0.1.1_linux_amd64.tar.gz` | x86_64 Linux 服务器 |
+| Linux arm64 | `mcpcloud_v0.1.1_linux_arm64.tar.gz` | aarch64 Linux 服务器 |
 
-Linux 可用 `uname -m` 查看架构。程序包是可执行文件，无需安装 Go。Linux 程序以 `CGO_ENABLED=0` 构建，但访问云 API 仍需系统 CA 证书、正确时间和网络连接。Windows 请使用仍受支持的 64 位系统。
+Windows 的“设置 → 系统 → 系统信息 → 系统类型”可查看 x64 或 ARM64。amd64 同时适用于 Intel 和 AMD；ARM64 设备使用 arm64 包。下方 Windows 示例按 amd64 展示，ARM64 用户将文件名及解压目录中的 amd64 替换为 arm64。Linux 可用 `uname -m` 查看架构。程序包是可执行文件，无需安装 Go。Linux 程序以 `CGO_ENABLED=0` 构建，但访问云 API 仍需系统 CA 证书、正确时间和网络连接。Windows 请使用仍受支持的 64 位系统。
 
-本次不提供 Docker 镜像、Windows ARM64、32 位或 macOS 包。架构依据及后续镜像计划见 [平台说明](https://github.com/SamuelSupe/mcpcloud/blob/v0.1.0/docs/release-platforms.md)。
+本次不提供 Docker 镜像、32 位或 macOS 包。架构依据及后续镜像计划见 [平台说明](https://github.com/SamuelSupe/mcpcloud/blob/v0.1.1/docs/release-platforms.md)。
 
 ## 2. 下载、校验、解压
 
-从 [v0.1.0 Release](https://github.com/SamuelSupe/mcpcloud/releases/tag/v0.1.0) 下载对应程序包与 `SHA256SUMS`。同时提供独立的 `INSTALL.zh-CN.md`，与本说明内容一致。
+从 [v0.1.1 Release](https://github.com/SamuelSupe/mcpcloud/releases/tag/v0.1.1) 下载对应程序包与 `SHA256SUMS`。同时提供独立的 `INSTALL.zh-CN.md`，与本说明内容一致。
 
 Windows PowerShell：
 
 ```powershell
-Get-FileHash .\mcpcloud_v0.1.0_windows_amd64.zip -Algorithm SHA256
+Get-FileHash .\mcpcloud_v0.1.1_windows_amd64.zip -Algorithm SHA256
 # 将 Hash 与 SHA256SUMS 中同名文件逐字比较，匹配后再解压。
-Expand-Archive .\mcpcloud_v0.1.0_windows_amd64.zip -DestinationPath .
-Set-Location .\mcpcloud_v0.1.0_windows_amd64
+Expand-Archive .\mcpcloud_v0.1.1_windows_amd64.zip -DestinationPath .
+Set-Location .\mcpcloud_v0.1.1_windows_amd64
 .\mcpcloud.exe version --json
 ```
 
 Linux（将 amd64 替换为实际下载的架构）：
 
 ```sh
-grep '  mcpcloud_v0.1.0_linux_amd64.tar.gz$' SHA256SUMS | sha256sum -c -
-tar -xzf mcpcloud_v0.1.0_linux_amd64.tar.gz
-cd mcpcloud_v0.1.0_linux_amd64
+grep '  mcpcloud_v0.1.1_linux_amd64.tar.gz$' SHA256SUMS | sha256sum -c -
+tar -xzf mcpcloud_v0.1.1_linux_amd64.tar.gz
+cd mcpcloud_v0.1.1_linux_amd64
 ./mcpcloud version --json
 ```
 
@@ -69,7 +70,7 @@ cd mcpcloud_v0.1.0_linux_amd64
 | 华为云 | `HUAWEICLOUD_SDK_AK`、`HUAWEICLOUD_SDK_SK`，临时身份另用安全令牌 | 明确 Project ID / Region；RMS、CES、产品详情和 BSS 费用按需授予读取权限，并配置账单站点。 |
 | 火山引擎 | `VOLCENGINE_ACCESS_KEY_ID`、`VOLCENGINE_SECRET_ACCESS_KEY`，临时身份另用会话令牌 | 配置账号和地域范围，授予资源中心、监控、费用及所选固定详情的读取权限。 |
 
-权限接口参考：[权限清单](https://github.com/SamuelSupe/mcpcloud/blob/v0.1.0/docs/permissions.md)。该清单包含基础接口说明；准确操作目录以运行版本的 `cloud_schema` 为准。云凭证保存在外部环境、凭证文件或云原生身份系统中，不放入程序包、客户端对话或 Git。
+权限接口参考：[权限清单](https://github.com/SamuelSupe/mcpcloud/blob/v0.1.1/docs/permissions.md)。该清单包含基础接口说明；准确操作目录以运行版本的 `cloud_schema` 为准。云凭证保存在外部环境、凭证文件或云原生身份系统中，不放入程序包、客户端对话或 Git。
 
 腾讯云使用已验证的八类资源直查时，在 profile 的 `options` 中设置：
 
@@ -191,7 +192,7 @@ costs | scope profile in ("YOUR_PROFILE") | range last 7d | summarize sum(amount
 metrics | scope provider in ("tencent"), profile in ("YOUR_PROFILE"), region in ("YOUR_REGION") | where metric == "QCE/CVM::CpuUsage?InstanceId=YOUR_INSTANCE_ID" | range last 10m | step 10s | fields timestamp, value, unit | limit 100
 ```
 
-分页要继续使用返回的游标，直到没有继续页；`status=partial/failed` 或截断结果不能当作完整结果。更完整语法见 [DSL 说明](https://github.com/SamuelSupe/mcpcloud/blob/v0.1.0/docs/dsl.md)。
+分页要继续使用返回的游标，直到没有继续页；`status=partial/failed` 或截断结果不能当作完整结果。更完整语法见 [DSL 说明](https://github.com/SamuelSupe/mcpcloud/blob/v0.1.1/docs/dsl.md)。
 
 ## 7. 常见问题与已知限制
 

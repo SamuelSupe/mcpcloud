@@ -1,0 +1,116 @@
+name: Release VM validation
+
+on:
+  push:
+    branches: [main, 'feat/release-*', 'feat/windows-arm-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+  GOFLAGS: -p=2
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.5'
+          cache: false
+      - name: Test source and build all four release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -count=1 ./... | tee "$RUNNER_TEMP/unit-tests.txt"
+          go run ./scripts/release --version v0.1.1 --out dist
+          cp "$RUNNER_TEMP/unit-tests.txt" dist/unit-tests.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-packages
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/INSTALL.zh-CN.md
+            dist/release-manifest.json
+            dist/SHA256SUMS
+            dist/unit-tests.txt
+          retention-days: 1
+          if-no-files-found: error
+
+  smoke:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            os: windows
+            arch: amd64
+          - runner: windows-11-arm
+            os: windows
+            arch: arm64
+          - runner: ubuntu-24.04
+            os: linux
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            os: linux
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.5'
+          architecture: ${{ matrix.arch }}
+          cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-packages
+          path: packages
+      - name: Verify and execute the extracted package on its native architecture
+        shell: pwsh
+        env:
+          TEST_OS: ${{ matrix.os }}
+          TEST_ARCH: ${{ matrix.arch }}
+          VM_IMAGE: ${{ matrix.runner }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $manifest = Get-Content packages/release-manifest.json -Raw | ConvertFrom-Json
+          if ($manifest.commit -ne $env:GITHUB_SHA) { throw 'Source commit mismatch' }
+          $asset = @($manifest.artifacts | Where-Object { $_.os -eq $env:TEST_OS -and $_.arch -eq $env:TEST_ARCH })
+          if ($asset.Count -ne 1) { throw 'Missing package' }
+          $path = Join-Path packages $asset[0].name
+          $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne $asset[0].sha256) { throw 'Package hash mismatch' }
+          $actualArch = (go env GOHOSTARCH).Trim()
+          $actualOS = (go env GOHOSTOS).Trim()
+          if ($actualArch -ne $env:TEST_ARCH -or $actualOS -ne $env:TEST_OS) { throw 'VM architecture mismatch' }
+          New-Item -ItemType Directory extracted | Out-Null
+          tar -xf $path -C extracted
+          if ($LASTEXITCODE) { throw 'Extraction failed' }
+          $suffix = if ($env:TEST_OS -eq 'windows') { '.exe' } else { '' }
+          $binary = Join-Path $PWD "extracted/mcpcloud_v0.1.1_$($env:TEST_OS)_$($env:TEST_ARCH)/mcpcloud$suffix"
+          go run ./scripts/smoke --binary $binary --version 0.1.1 --commit $env:GITHUB_SHA --os $env:TEST_OS --arch $env:TEST_ARCH --out smoke.json
+          if ($LASTEXITCODE) { throw 'Package smoke verification failed' }
+          $result = Get-Content smoke.json -Raw | ConvertFrom-Json
+          $result | Add-Member -NotePropertyName vm_image -NotePropertyValue $env:VM_IMAGE
+          $result | Add-Member -NotePropertyName archive_sha256 -NotePropertyValue $hash
+          $result | Add-Member -NotePropertyName workflow_run -NotePropertyValue "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          $result | ConvertTo-Json -Depth 10 | Set-Content smoke.json -Encoding utf8NoBOM
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: verification-${{ matrix.os }}-${{ matrix.arch }}
+          path: smoke.json
+          retention-days: 1
+          if-no-files-found: warn

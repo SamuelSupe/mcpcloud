@@ -5,7 +5,7 @@ import "runtime"
 
 // Release builds set these values with -ldflags -X.
 var (
-	Version   = "0.1.0-dev"
+	Version   = "0.1.1-dev"
 	Commit    = "unknown"
 	BuildTime = "unknown"
 )
