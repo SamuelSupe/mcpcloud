@@ -142,7 +142,8 @@ func build() error {
 			found = true
 		}
 		if !found {
-			return fmt.Errorf("dependency license not found: %s", parts[0])
+			text := "Upstream module " + parts[0] + " " + parts[1] + " contains no top-level LICENSE, COPYING or NOTICE file. No license terms are inferred here. Review the upstream source at https://" + parts[0] + ".\n"
+			notices = append(notices, entry{"licenses/" + parts[0] + "@" + parts[1] + "/UPSTREAM-NOTICE.txt", []byte(text), 0644})
 		}
 	}
 	sort.Strings(names)
