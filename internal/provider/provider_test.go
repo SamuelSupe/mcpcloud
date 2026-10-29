@@ -215,7 +215,7 @@ func TestScopedAdapterTargetRegionsRespectSourceAndProviderSemantics(t *testing.
 				config.Profile{Provider: model.ProviderGCP, Regions: []string{"us-central1", "asia-east1"}},
 			),
 			source: model.SourceResources,
-			want:   []string{"us-central1", "asia-east1"},
+			want:   []string{"us-central1", "asia-east1", "global"},
 		},
 		{
 			name: "azure metrics require exact configured regions",

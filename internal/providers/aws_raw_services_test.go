@@ -44,6 +44,8 @@ func TestAWSRawServicePaginationAndSafeRows(t *testing.T) {
 			pageToken := "previous"
 			if strings.HasPrefix(tc.operation, "aws.elasticache.") {
 				pageToken = encodeRawCacheCursor(rawCacheCursor{Marker: "previous"})
+			} else {
+				pageToken = encodeRawECSCursor(rawECSCursor{Token: "previous"})
 			}
 			cfg := awsbase.Config{
 				Region:      "cn-northwest-1",
@@ -55,8 +57,8 @@ func TestAWSRawServicePaginationAndSafeRows(t *testing.T) {
 					if r.URL.Query().Get("Marker") != "previous" && r.Header.Get("X-Amz-Target") == "" {
 						t.Fatalf("lost ElastiCache cursor: %s", r.URL.RawQuery)
 					}
-					if strings.HasPrefix(tc.operation, "aws.elasticache.") && r.URL.Query().Get("MaxRecords") != "20" {
-						t.Fatalf("ElastiCache MaxRecords = %s, want 20", r.URL.Query().Get("MaxRecords"))
+					if strings.HasPrefix(tc.operation, "aws.elasticache.") && r.URL.Query().Get("MaxRecords") != "100" {
+						t.Fatalf("ElastiCache MaxRecords = %s, want fixed page size 100", r.URL.Query().Get("MaxRecords"))
 					}
 					if strings.HasPrefix(tc.operation, "aws.ecs.") {
 						payload, _ := io.ReadAll(r.Body)
@@ -86,6 +88,12 @@ func TestAWSRawServicePaginationAndSafeRows(t *testing.T) {
 					t.Fatal(err)
 				}
 				gotNext = cursor.Marker
+			} else {
+				cursor, err := decodeRawECSCursor(page.NextToken, tc.operation)
+				if err != nil {
+					t.Fatal(err)
+				}
+				gotNext = cursor.Token
 			}
 			if page.Rows[0]["id"] != tc.wantID || resourceType != tc.wantType || gotNext != tc.wantNext {
 				t.Fatalf("unexpected page: %#v", page)
@@ -112,8 +120,8 @@ func TestAWSRawElastiCacheHonorsSmallMCPPages(t *testing.T) {
 		Credentials: credentials.NewStaticCredentialsProvider("test", "test", ""),
 		HTTPClient: awsInventoryTransport(func(r *http.Request) (*http.Response, error) {
 			calls++
-			if r.URL.Query().Get("MaxRecords") != "20" {
-				t.Fatalf("MaxRecords = %s, want 20", r.URL.Query().Get("MaxRecords"))
+			if r.URL.Query().Get("MaxRecords") != "100" {
+				t.Fatalf("MaxRecords = %s, want fixed page size 100", r.URL.Query().Get("MaxRecords"))
 			}
 			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
 		}),

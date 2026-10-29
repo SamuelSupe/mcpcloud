@@ -89,10 +89,10 @@ func TestPartnerDailyBoundsAcceptRelativeRanges(t *testing.T) {
 	start := time.Date(2026, 9, 8, 11, 3, 0, 0, time.FixedZone("UTC+8", 8*60*60))
 	end := start.Add(168 * time.Hour)
 	gotStart, gotEnd := partnerDailyBounds(start, end)
-	if want := "2026-09-09T00:00:00Z"; gotStart.Format(time.RFC3339) != want {
+	if want := "2026-09-09T00:00:00+08:00"; gotStart.Format(time.RFC3339) != want {
 		t.Fatalf("start = %s, want %s", gotStart.Format(time.RFC3339), want)
 	}
-	if want := "2026-09-16T00:00:00Z"; gotEnd.Format(time.RFC3339) != want {
+	if want := "2026-09-16T00:00:00+08:00"; gotEnd.Format(time.RFC3339) != want {
 		t.Fatalf("end = %s, want %s", gotEnd.Format(time.RFC3339), want)
 	}
 	if gotEnd.Sub(gotStart) != 7*24*time.Hour {
@@ -102,7 +102,10 @@ func TestPartnerDailyBoundsAcceptRelativeRanges(t *testing.T) {
 	start = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	end = time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
 	gotStart, gotEnd = partnerDailyBounds(start, end)
-	if !gotStart.Equal(start) || !gotEnd.Equal(end) {
+	if wantStart := time.Date(2026, 9, 2, 0, 0, 0, 0, tencentBillingLocation()); !gotStart.Equal(wantStart) {
+		t.Fatalf("midnight start = %s, want %s", gotStart, wantStart)
+	}
+	if wantEnd := time.Date(2026, 9, 9, 0, 0, 0, 0, tencentBillingLocation()); !gotEnd.Equal(wantEnd) {
 		t.Fatalf("midnight range changed: %s to %s", gotStart, gotEnd)
 	}
 }

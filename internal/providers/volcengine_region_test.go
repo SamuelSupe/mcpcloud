@@ -50,7 +50,8 @@ func TestVolcengineNativeInventoryRegion(t *testing.T) {
 				if tc.param != "" {
 					params["region"] = tc.param
 				}
-				page, err := adapter.NativeRead(context.Background(), provider.NativeRequest{Operation: op.Name, Region: tc.region, Params: params, PageToken: "prior-page", Limit: 7})
+				priorPage := encodeVolcengineSearchCursor(volcengineSearchCursor{Token: "prior-page"})
+				page, err := adapter.NativeRead(context.Background(), provider.NativeRequest{Operation: op.Name, Region: tc.region, Params: params, PageToken: priorPage, Limit: 7})
 				if tc.reject {
 					if !hasProviderErrorCode(err, "invalid_parameter") || len(bodies) != 0 {
 						t.Fatalf("conflict must fail before HTTP: err=%v requests=%d", err, len(bodies))
@@ -73,7 +74,8 @@ func TestVolcengineNativeInventoryRegion(t *testing.T) {
 				if got != tc.want {
 					t.Errorf("Region filter=%q, want %q", got, tc.want)
 				}
-				if body["NextToken"] != "prior-page" || body["MaxResults"] != float64(7) || page.NextToken != "next-page" {
+				cursor, cursorErr := decodeVolcengineSearchCursor(page.NextToken)
+				if body["NextToken"] != "prior-page" || body["MaxResults"] != float64(volcengineSearchPageSize) || cursorErr != nil || cursor.Token != "next-page" {
 					t.Errorf("pagination not preserved: request=%v page=%+v", body, page)
 				}
 			})
@@ -106,7 +108,8 @@ func TestVolcengineProjectNameIsFilteredLocally(t *testing.T) {
 	page, err := adapter.NativeRead(context.Background(), provider.NativeRequest{
 		Operation: volcengineResourcesOperation, Region: "cn-shanghai", Params: map[string]any{"project_name": "guance-sit", "service": "clb"}, Limit: 2,
 	})
-	if err != nil || len(page.Rows) != 1 || page.Rows[0]["id"] != "one" || page.Scanned != 2 || page.NextToken != "next-page" {
+	cursor, cursorErr := decodeVolcengineSearchCursor(page.NextToken)
+	if err != nil || len(page.Rows) != 1 || page.Rows[0]["id"] != "one" || page.Scanned != 2 || cursorErr != nil || cursor.Token != "next-page" {
 		t.Fatalf("project-filtered page = %#v, err=%v", page, err)
 	}
 }

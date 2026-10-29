@@ -17,8 +17,8 @@ func TestAzureIAMTargetsSubscriptionOnce(t *testing.T) {
 		}
 	}
 	got, err := a.TargetRegions(model.SourceResources, nil)
-	if err != nil || !reflect.DeepEqual(got, []string{"eastus2", "westus2"}) {
-		t.Fatalf("resource targets = %v, %v; want configured regions", got, err)
+	if err != nil || !reflect.DeepEqual(got, []string{"eastus2", "westus2", "global"}) {
+		t.Fatalf("resource targets = %v, %v; want configured regions and global resources", got, err)
 	}
 	if _, err := a.TargetRegions(model.SourceIAM, []string{"unconfigured"}); err == nil {
 		t.Fatal("IAM accepted a region outside the profile")

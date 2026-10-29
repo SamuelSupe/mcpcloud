@@ -311,7 +311,7 @@ func TestConfiguredCostCapabilitiesBecomeAvailable(t *testing.T) {
 			name: "gcp billing export table",
 			adapter: &gcpAdapter{
 				name: "gcp-prod",
-				profile: config.Profile{Options: map[string]string{
+				profile: config.Profile{Scopes: config.Scopes{Projects: []string{"billing-project"}}, Options: map[string]string{
 					"billing_table": "billing-project.billing_dataset.billing_export",
 				}},
 			},
