@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -112,5 +113,25 @@ func TestAlibabaDailyCostsBoundaries(t *testing.T) {
 	d, _, e := alibabaDailyPosition(day.Add(time.Hour), end, "")
 	if e != nil || d.Format("2006-01-02") != "2026-10-01" {
 		t.Fatalf("partial day=%v %v", d, e)
+	}
+}
+
+func TestAlibabaDailyCostsAllowChangingTotals(t *testing.T) {
+	day := time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC)
+	end := day.AddDate(0, 0, 1)
+	a := &alibabaAdapter{}
+	for _, total := range []int{3, 1, 0} {
+		t.Run(strconv.Itoa(total), func(t *testing.T) {
+			r := dailyResponse("2026-09-30")
+			r.Data.TotalCount = total
+			r.Data.Items.Item = make([]bssopenapi.Item, total)
+			for i := range r.Data.Items.Item {
+				r.Data.Items.Item[i] = bssopenapi.Item{BillingDate: "2026-09-30", OwnerID: "123", Currency: "CNY", PretaxAmount: float64(i + 1)}
+			}
+			page, err := a.alibabaDailyPage(r, []string{"123"}, day, end, periodCursor{Page: 1, Offset: 1, Total: 2}, 300)
+			if err != nil || len(page.Rows) != max(total-1, 0) || page.NextToken != "" {
+				t.Fatalf("changed total %d: %+v %v", total, page, err)
+			}
+		})
 	}
 }

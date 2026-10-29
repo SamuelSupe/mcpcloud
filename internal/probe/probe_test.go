@@ -380,10 +380,11 @@ type coordinatorRunner struct {
 	report   Report
 	err      error
 
-	mu      sync.Mutex
-	calls   int
-	started chan struct{}
-	release chan struct{}
+	mu       sync.Mutex
+	calls    int
+	started  chan struct{}
+	release  chan struct{}
+	contexts chan context.Context
 }
 
 func (r *coordinatorRunner) Profiles() []string { return append([]string(nil), r.profiles...) }
@@ -397,6 +398,9 @@ func (r *coordinatorRunner) Run(ctx context.Context, _ []string) (Report, error)
 		}
 	}
 	r.mu.Unlock()
+	if r.contexts != nil {
+		r.contexts <- ctx
+	}
 	if r.release != nil {
 		select {
 		case <-r.release:
@@ -502,5 +506,44 @@ func TestCoordinatorSingleFlightsConcurrentRefreshes(t *testing.T) {
 	}
 	if cached != 1 {
 		t.Fatalf("concurrent refresh cached results = %d, want one cached waiter result", cached)
+	}
+}
+
+func TestCoordinatorRefreshSurvivesRequestCancellation(t *testing.T) {
+	type contextKey struct{}
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), contextKey{}, "request-value"))
+	defer cancel()
+	runner := &coordinatorRunner{
+		profiles: []string{"aws-prod"},
+		report:   Report{Status: StatusReady, Profiles: []ProfileResult{{Profile: "aws-prod", Status: StatusReady}}},
+		contexts: make(chan context.Context, 1),
+		release:  make(chan struct{}),
+	}
+	coordinator := NewCoordinator(runner, time.Minute, time.Second)
+	finished := make(chan error, 1)
+	go func() { _, err := coordinator.Current(ctx); finished <- err }()
+	probeCtx := <-runner.contexts
+	cancel()
+	if probeCtx.Err() != nil || probeCtx.Value(contextKey{}) != "request-value" {
+		t.Fatalf("shared probe inherited cancellation or lost context values: %v", probeCtx.Err())
+	}
+	if _, ok := probeCtx.Deadline(); !ok {
+		t.Fatal("shared probe has no timeout")
+	}
+	close(runner.release)
+	if err := <-finished; err != nil {
+		t.Fatal(err)
+	}
+	report, err := coordinator.Current(context.Background())
+	if err != nil || !report.Cached || report.Status != StatusReady || runner.callCount() != 1 {
+		t.Fatalf("request cancellation poisoned shared cache: %+v %v", report, err)
+	}
+}
+
+func TestCoordinatorDetachedRefreshStillTimesOut(t *testing.T) {
+	runner := &coordinatorRunner{profiles: []string{"aws-prod"}, release: make(chan struct{})}
+	coordinator := NewCoordinator(runner, time.Minute, 10*time.Millisecond)
+	if _, err := coordinator.Current(context.Background()); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("unresponsive probe error = %v, want deadline exceeded", err)
 	}
 }

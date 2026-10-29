@@ -64,7 +64,8 @@ func (c *Coordinator) Current(ctx context.Context) (Report, error) {
 		wait := c.wait
 		c.mu.Unlock()
 
-		probeCtx, cancel := context.WithTimeout(ctx, c.timeout)
+		// A shared refresh must outlive the initiating HTTP request, but stays bounded.
+		probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.timeout)
 		report, err := c.runner.Run(probeCtx, c.runner.Profiles())
 		cancel()
 

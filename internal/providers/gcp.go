@@ -138,10 +138,20 @@ func (a *gcpAdapter) Query(ctx context.Context, req provider.QueryRequest) (prov
 
 func (a *gcpAdapter) NativeRead(ctx context.Context, req provider.NativeRequest) (provider.Page, error) {
 	if detail, ok := instanceDetailFor(model.ProviderGCP, req.Operation); ok {
-		return a.getInstanceDetail(ctx, req, detail)
+		if err := validateInstanceDetailRequest(detail, req); err != nil {
+			return provider.Page{}, err
+		}
+		return a.readScopedDetail(ctx, req, func(scoped *gcpAdapter) (provider.Page, error) {
+			return scoped.getInstanceDetail(ctx, req, detail)
+		})
 	}
 	if detail, ok := deepDetailFor(model.ProviderGCP, req.Operation); ok {
-		return a.readDeepDetail(ctx, req, detail)
+		if err := validateDeepDetailRequest(detail, req); err != nil {
+			return provider.Page{}, err
+		}
+		return a.readScopedDetail(ctx, req, func(scoped *gcpAdapter) (provider.Page, error) {
+			return scoped.readDeepDetail(ctx, req, detail)
+		})
 	}
 	product, productRead := nativeProductFor(model.ProviderGCP, req.Operation)
 	if productRead {

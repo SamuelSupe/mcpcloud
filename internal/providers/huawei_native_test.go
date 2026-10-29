@@ -1,7 +1,11 @@
 package providers
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	ces "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/ces/v1"
+	cesmodel "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/ces/v1/model"
 	"testing"
 
 	"mcpcloud/internal/provider"
@@ -44,5 +48,47 @@ func TestNativeHuaweiListLimit(t *testing.T) {
 		if got := nativeHuaweiListLimit(test.requested, test.maximum); got != test.want {
 			t.Fatalf("nativeHuaweiListLimit(%d, %d) = %d, want %d", test.requested, test.maximum, got, test.want)
 		}
+	}
+}
+
+func TestHuaweiCESPaginationUsesMarkerAtFinalPage(t *testing.T) {
+	t.Setenv("HUAWEICLOUD_SDK_AK", "test")
+	t.Setenv("HUAWEICLOUD_SDK_SK", "test")
+	t.Setenv("HUAWEICLOUD_SDK_SECURITY_TOKEN", "")
+	old := queryHuaweiCESMetrics
+	t.Cleanup(func() { queryHuaweiCESMetrics = old })
+	a := &huaweiAdapter{name: "ces", profile: envCredentialProfile(nil)}
+	a.profile.Scopes.Projects = []string{"project"}
+	a.profile.Regions = []string{"cn-north-4"}
+	for _, lastCount := range []int{0, 1, 2} {
+		t.Run(fmt.Sprintf("last_count_%d", lastCount), func(t *testing.T) {
+			calls := 0
+			queryHuaweiCESMetrics = func(_ *ces.CesClient, req *cesmodel.ListMetricsRequest) (*cesmodel.ListMetricsResponse, error) {
+				count, marker := 2, "next"
+				if calls > 0 {
+					if req.Start == nil || *req.Start != "next" {
+						t.Fatal("lost CES continuation")
+					}
+					count, marker = lastCount, ""
+				}
+				calls++
+				metrics := make([]cesmodel.MetricInfoList, count)
+				for i := range metrics {
+					metrics[i].Namespace = "SYS.ECS"
+					metrics[i].MetricName = fmt.Sprintf("metric-%d-%d", calls, i)
+				}
+				return &cesmodel.ListMetricsResponse{Metrics: &metrics, MetaData: &cesmodel.MetricListMetaDataResp{Count: int32(count), Total: int32(2 + lastCount), Marker: marker}}, nil
+			}
+			req := provider.NativeRequest{Operation: huaweiCESListMetricsOperation, Limit: 2, Params: map[string]any{"namespace": "SYS.ECS"}}
+			first, err := a.NativeRead(context.Background(), req)
+			if err != nil || len(first.Rows) != 2 || first.NextToken != "next" {
+				t.Fatalf("first page: %+v %v", first, err)
+			}
+			req.PageToken = first.NextToken
+			last, err := a.NativeRead(context.Background(), req)
+			if err != nil || len(last.Rows) != lastCount || last.NextToken != "" || calls != 2 {
+				t.Fatalf("last page: %+v %v calls=%d", last, err, calls)
+			}
+		})
 	}
 }

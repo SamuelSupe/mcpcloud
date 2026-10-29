@@ -89,6 +89,9 @@ func (a *awsAdapter) Query(ctx context.Context, req provider.QueryRequest) (prov
 		}
 	}
 	query := "*"
+	if req.Source == model.SourceIAM {
+		query += " service:iam"
+	}
 	if req.Region != "" && req.Region != "*" {
 		if !awsRegionPattern.MatchString(req.Region) {
 			return provider.Page{}, &provider.Error{Code: "invalid_region", Operation: awsInventoryOperation, Message: "AWS region is invalid"}
@@ -124,6 +127,9 @@ func (a *awsAdapter) NativeRead(ctx context.Context, req provider.NativeRequest)
 		}
 		baseRequest := req
 		baseRequest.Operation = awsInventoryOperation
+		if product.source == model.SourceIAM {
+			baseRequest.Params = map[string]any{"service": "iam"}
+		}
 		page, err := a.NativeRead(ctx, baseRequest)
 		return completeNativeProduct(page, err, product, req.Operation)
 	}

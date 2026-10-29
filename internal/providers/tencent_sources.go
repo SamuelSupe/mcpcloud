@@ -282,7 +282,7 @@ func (a *tencentAdapter) queryCosts(ctx context.Context, req provider.QueryReque
 	if payload.Response.Error != nil {
 		return provider.Page{}, &provider.Error{Code: payload.Response.Error.Code, Operation: tencentCostsOperation, Message: payload.Response.Error.Message, Retryable: containsAny(strings.ToLower(payload.Response.Error.Code), "requestlimit", "internalerror")}
 	}
-	if payload.Response.Total < 0 || cursor.Total > 0 && cursor.Total != payload.Response.Total || page*providerPageSize < payload.Response.Total && len(payload.Response.Detail) != providerPageSize {
+	if payload.Response.Total < 0 || page*providerPageSize < payload.Response.Total && len(payload.Response.Detail) != providerPageSize {
 		return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: tencentCostsOperation, Message: "Unexpected billing pagination metadata"}
 	}
 	flatRows := make([]map[string]any, 0)
@@ -304,9 +304,7 @@ func (a *tencentAdapter) queryCosts(ctx context.Context, req provider.QueryReque
 			flatRows = append(flatRows, row)
 		}
 	}
-	if cursor.Offset >= len(flatRows) && cursor.Offset != 0 {
-		return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: tencentCostsOperation, Message: "Billing cursor offset is outside the provider page"}
-	}
+	cursor.Offset = min(cursor.Offset, len(flatRows))
 	endOffset := min(cursor.Offset+limit, len(flatRows))
 	rows := flatRows[cursor.Offset:endOffset]
 	next := ""

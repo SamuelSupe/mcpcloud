@@ -3,6 +3,7 @@ package providers
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -178,6 +179,7 @@ func gcpMetricResourceID(labels map[string]string) string {
 }
 
 type bigQueryCursor struct {
+	Query     string `json:"q,omitempty"`
 	JobID     string `json:"j"`
 	Location  string `json:"l,omitempty"`
 	PageToken string `json:"p,omitempty"`
@@ -239,13 +241,22 @@ func (a *gcpAdapter) queryCosts(ctx context.Context, scope string, req provider.
 	if table == "" {
 		return provider.Page{}, &provider.Error{Code: "capability_unavailable", Operation: gcpCostsOperation, Message: "options.billing_table is not configured"}
 	}
-	client, err := a.httpClient(ctx)
-	if err != nil {
-		return provider.Page{}, err
-	}
 	project := a.profile.Options["billing_project"]
 	if project == "" {
 		project = strings.Split(table, ".")[0]
+	}
+	queryContext, _ := json.Marshal([]string{"gcp-costs-v1", a.name, scope, table, project, a.profile.Options["billing_location"], start.UTC().Format(time.RFC3339Nano), end.UTC().Format(time.RFC3339Nano)})
+	binding := fmt.Sprintf("%x", sha256.Sum256(queryContext))
+	var cursor bigQueryCursor
+	if req.PageToken != "" {
+		cursor, err = decodeBigQueryCursor(req.PageToken)
+		if err != nil || cursor.Query != binding {
+			return provider.Page{}, &provider.Error{Code: "invalid_cursor", Operation: gcpCostsOperation, Message: "billing cursor does not match this query"}
+		}
+	}
+	client, err := a.httpClient(ctx)
+	if err != nil {
+		return provider.Page{}, err
 	}
 	limit := req.Limit
 	if limit <= 0 || limit > 100000 {
@@ -271,10 +282,6 @@ func (a *gcpAdapter) queryCosts(ctx context.Context, scope string, req provider.
 			return provider.Page{}, err
 		}
 	} else {
-		cursor, err := decodeBigQueryCursor(req.PageToken)
-		if err != nil {
-			return provider.Page{}, &provider.Error{Code: "invalid_cursor", Operation: gcpCostsOperation, Message: err.Error()}
-		}
 		values := url.Values{"maxResults": []string{strconv.Itoa(limit)}}
 		if cursor.Location != "" {
 			values.Set("location", cursor.Location)
@@ -302,7 +309,7 @@ func (a *gcpAdapter) queryCosts(ctx context.Context, scope string, req provider.
 	}
 	next := ""
 	if !payload.JobComplete || payload.PageToken != "" {
-		next = encodeBigQueryCursor(bigQueryCursor{JobID: payload.JobReference.JobID, Location: payload.JobReference.Location, PageToken: payload.PageToken})
+		next = encodeBigQueryCursor(bigQueryCursor{Query: binding, JobID: payload.JobReference.JobID, Location: payload.JobReference.Location, PageToken: payload.PageToken})
 	}
 	rows, err := a.bigQueryCostRows(payload)
 	if err != nil {

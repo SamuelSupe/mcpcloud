@@ -1,6 +1,11 @@
 package providers
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"mcpcloud/internal/model"
@@ -76,5 +81,45 @@ func TestAWSMetricUnits(t *testing.T) {
 		if got := awsMetricUnit(tc.namespace, tc.metric); got != tc.want {
 			t.Fatalf("awsMetricUnit(%q, %q) = %q, want %q", tc.namespace, tc.metric, got, tc.want)
 		}
+	}
+}
+
+func TestAWSIAMQueryPushesServiceFilter(t *testing.T) {
+	queries := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ QueryString string }
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+			w.WriteHeader(400)
+			return
+		}
+		queries <- body.QueryString
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"Resources":[{"Arn":"arn:aws:iam::123456789012:role/test","Service":"iam","ResourceType":"iam:role","Region":"global","OwningAccountId":"123456789012"}]}`))
+	}))
+	defer server.Close()
+	t.Setenv("AWS_ENDPOINT_URL_RESOURCE_EXPLORER_2", server.URL)
+	t.Setenv("AWS_ACCESS_KEY_ID", "test")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
+	t.Setenv("AWS_SESSION_TOKEN", "")
+	a := &awsAdapter{name: "iam", profile: envCredentialProfile(nil)}
+	a.profile.Scopes.Accounts = []string{"123456789012"}
+	a.profile.Regions = []string{"us-east-1"}
+	for _, source := range []model.Source{model.SourceIAM, model.SourceResources} {
+		page, err := a.Query(context.Background(), provider.QueryRequest{Source: source, Limit: 1})
+		if err != nil || len(page.Rows) != 1 {
+			t.Fatalf("query: %+v %v", page, err)
+		}
+		query := <-queries
+		if strings.Contains(query, "service:iam") != (source == model.SourceIAM) || !strings.Contains(query, "accountid:123456789012") {
+			t.Fatalf("wrong provider query: %q", query)
+		}
+	}
+	page, err := a.NativeRead(context.Background(), provider.NativeRequest{Operation: "aws.iam.list_resources", Limit: 1})
+	if err != nil || len(page.Rows) != 1 {
+		t.Fatalf("native IAM read: %+v %v", page, err)
+	}
+	if query := <-queries; !strings.Contains(query, "service:iam") || !strings.Contains(query, "accountid:123456789012") {
+		t.Fatalf("wrong native IAM query: %q", query)
 	}
 }

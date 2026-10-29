@@ -12,6 +12,10 @@ import (
 	"mcpcloud/internal/provider"
 )
 
+var queryHuaweiCESMetrics = func(client *ces.CesClient, request *cesmodel.ListMetricsRequest) (*cesmodel.ListMetricsResponse, error) {
+	return client.ListMetrics(request)
+}
+
 func huaweiCESOperations() []provider.Operation {
 	return []provider.Operation{operation(huaweiCESListMetricsOperation, model.ProviderHuawei, "monitoring", "Discover monitored CES metric definitions and exact dimensions", map[string]any{
 		"namespace":   map[string]any{"type": "string", "required": true},
@@ -50,7 +54,7 @@ func (a *huaweiAdapter) listHuaweiCESMetrics(ctx context.Context, r provider.Nat
 	}
 	limit := nativeHuaweiListLimit(int(r.Limit), 1000)
 	request := &cesmodel.ListMetricsRequest{Namespace: &namespace, MetricName: optionalString(metricName), Start: optionalString(r.PageToken), Limit: &limit}
-	response, err := ces.NewCesClient(hc).ListMetrics(request)
+	response, err := queryHuaweiCESMetrics(ces.NewCesClient(hc), request)
 	if err != nil {
 		return provider.Page{}, huaweiSourceError(r.Operation, err)
 	}
@@ -58,7 +62,7 @@ func (a *huaweiAdapter) listHuaweiCESMetrics(ctx context.Context, r provider.Nat
 	if response.Metrics != nil {
 		metricCount = len(*response.Metrics)
 	}
-	if response.MetaData == nil || response.MetaData.Count < 0 || response.MetaData.Count != int32(metricCount) || response.MetaData.Count > limit || response.MetaData.Total < response.MetaData.Count || (response.MetaData.Total > response.MetaData.Count && (response.MetaData.Marker == "" || response.MetaData.Count == 0)) || (response.MetaData.Marker != "" && response.MetaData.Marker == r.PageToken) {
+	if response.MetaData == nil || response.MetaData.Count < 0 || response.MetaData.Count != int32(metricCount) || response.MetaData.Count > limit || response.MetaData.Total < response.MetaData.Count || (response.MetaData.Marker != "" && response.MetaData.Count == 0) || (response.MetaData.Marker != "" && response.MetaData.Marker == r.PageToken) {
 		return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: r.Operation, Message: "CES returned invalid metric pagination metadata"}
 	}
 	rows := []map[string]any{}
@@ -78,10 +82,8 @@ func (a *huaweiAdapter) listHuaweiCESMetrics(ctx context.Context, r provider.Nat
 			rows = append(rows, row)
 		}
 	}
-	next := ""
-	if response.MetaData.Total > response.MetaData.Count {
-		next = response.MetaData.Marker
-	}
+	// Total covers all pages; only Marker says whether another page exists.
+	next := response.MetaData.Marker
 	return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}, nil
 }
 

@@ -101,15 +101,15 @@ func (a *alibabaAdapter) alibabaDailyPage(response *bssopenapi.QueryInstanceBill
 	}
 	const providerPageSize = 300
 	page := cursor.Page
-	if page < 1 || data.PageNum != page || data.PageSize != providerPageSize || data.TotalCount < 0 || cursor.Total > 0 && cursor.Total != data.TotalCount || page*providerPageSize < data.TotalCount && len(data.Items.Item) != providerPageSize {
+	if page < 1 || data.PageNum != page || data.PageSize != providerPageSize || data.TotalCount < 0 || page*providerPageSize < data.TotalCount && len(data.Items.Item) != providerPageSize {
 		return bad("Unexpected billing pagination metadata")
 	}
 	if len(data.Items.Item) == 0 && (page-1)*providerPageSize+cursor.Offset < data.TotalCount {
 		return bad("Empty billing page before total count")
 	}
-	if cursor.Offset >= len(data.Items.Item) && cursor.Offset != 0 {
-		return bad("Daily billing cursor offset is outside the provider page")
-	}
+	// Current-day bills can shrink between requests; already consumed offsets
+	// beyond the new page end simply finish that page.
+	cursor.Offset = min(cursor.Offset, len(data.Items.Item))
 	endOffset := min(cursor.Offset+limit, len(data.Items.Item))
 	rows := make([]map[string]any, 0, endOffset-cursor.Offset)
 	for i := cursor.Offset; i < endOffset; i++ {
