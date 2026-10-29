@@ -31,11 +31,19 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: mcpcloud <version|serve|validate-config|probe-profile> [options]")
+		return errors.New("usage: mcpcloud <version|init|configure|doctor|client-config|serve|validate-config|probe-profile> [options]")
 	}
 	switch args[0] {
 	case "version", "--version", "-version":
 		return showVersion(args[1:])
+	case "init":
+		return initConfig(args[1:], os.Stdin, os.Stdout)
+	case "configure":
+		return configure(args[1:], os.Stdin, os.Stdout)
+	case "doctor":
+		return doctor(args[1:], os.Stdout)
+	case "client-config":
+		return clientConfig(args[1:], os.Stdout)
 	case "serve":
 		return serve(args[1:])
 	case "validate-config":

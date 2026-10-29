@@ -1,0 +1,15 @@
+{
+  "name": "gcp-agent",
+  "profile": {
+    "provider": "gcp",
+    "credential": {
+      "source": "default"
+    },
+    "scopes": {
+      "projects": ["YOUR_PROJECT_ID"]
+    },
+    "regions": ["us-central1"],
+    "services": ["compute", "storage", "network"]
+  },
+  "features": ["resources"]
+}

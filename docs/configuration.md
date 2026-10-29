@@ -69,6 +69,30 @@ GCP fixed detail reads accept projects explicitly allowed by the profile. With o
 
 ## Runtime commands
 
+Version 0.2.0 provides these setup commands:
+
+```sh
+./mcpcloud init --config ~/.config/mcpcloud/config.yaml
+./mcpcloud doctor --config ~/.config/mcpcloud/config.yaml --json
+./mcpcloud client-config --config ~/.config/mcpcloud/config.yaml --output ./mcpcloud-client.json
+```
+
+`init` has two steps: reference an existing identity, then explicitly select scopes/regions/domains and optional metrics/cost prerequisites. It previews the new profile before confirmation and adds it without replacing an existing profile. Online setup discovers scope candidates and runs a bounded inventory diagnosis after saving; `--offline` skips both cloud phases. A failed post-save diagnosis leaves the profile saved and exits non-zero. Both cloud phases default to 30 seconds and accept `--timeout` up to two minutes; interactive input is not timed.
+
+`doctor` checks all enabled profiles by default, or one with `--profile NAME`. It reports local prerequisites, one inventory read operation, scope evidence, and static capability prerequisites separately. `configured_unverified`, `not_configured`, and `not_checked` never imply cloud permissions passed. Optional metrics/cost prerequisites do not gate basic resource readiness. `ready` and locally valid `offline` reports exit zero; `degraded` and `not_ready` exit non-zero. Unlike the reachability-oriented `probe-profile` aggregation, doctor reports `not_ready` if any selected profile has a hard failure. `--json` emits completed reports; argument/configuration errors go to stderr. `--offline` never performs a cloud probe. See [setup and diagnosis](setup.zh-CN.md) for individual checks and next steps.
+
+`client-config` emits stdio `mcpServers` JSON by default, or native Codex TOML with `--client codex`, using shared executable/profile validation and absolute paths. `--binary` and `--name` customize the registration; `--output` only creates a new snippet file. Codex output includes `env_vars` for enabled profiles' standard credential references and common AWS/Azure identity selectors; repeat `--env-var NAME` for additional SDK/default-chain environment variables. No values are read or copied. The variables must exist in the process that starts Codex; this does not inject the current shell's environment into an already running app.
+
+`client-config --client codex --install` merges into `$CODEX_HOME/config.toml`, falling back to `~/.codex/config.toml`. `--codex-config PATH` explicitly selects another file, including a project `.codex/config.toml` or Codex profile file. It reuses the YAML writer's lock, concurrent-content check and atomic save, preserving existing TOML bytes/comments and all other MCP entries. A matching command/args and sufficient `env_vars` is a no-op; local policy, extra variables and `enabled = false` remain intact. Conflicting names, malformed TOML, symlinks, or inline parent tables that cannot be extended without rewriting are rejected. Use another `--name`, or review the existing entry manually; no force overwrite is provided.
+
+Installation prints JSON with `status` (`installed` or `unchanged`), `config_path`, `server_name`, `enabled`, `restart_required: true` and `connection_verified: false`; failures exit nonzero with an error on stderr. `--install` cannot be combined with `--output`; `--codex-config` requires install, and install/environment forwarding flags require the Codex format. Both generation and installation are offline. Installing settings does not reload Codex, enable a disabled entry, trust a project, or test cloud permissions. Restart/reconnect in Codex and verify the expected profile and query; see [setup](setup.zh-CN.md#codex-原生配置与自动接入) and [Agent setup](agent-setup.md).
+
+`configure --input request.json --config PATH` is the non-interactive equivalent for local agents. Requests contain `name`, the existing `profile` schema, and optional `features` (`resources`, `metrics`, `costs`). File input and `--input -` accept one JSON object up to 64 KiB and reject unknown fields. Like init, this entry point requires enabled profiles, explicit scopes/regions and normalized service domains. Preview is always offline and writes nothing; it returns `plan.id`, the normalized request, destination and local doctor report. `--apply --plan-id ID` requires the same reviewed request and unchanged configuration, preserves existing settings, and then runs doctor (or local checks with `--offline`). `--discover` performs only the existing fixed scope discovery using credential references and never saves; it cannot be combined with apply/offline.
+
+Configure prints one JSON report, including safe `error.code`, `error.field` and `error.message` when applicable. A successful preview exits zero even when local credentials are missing; inspect its doctor report. After an apply, `saved: true` remains true even if doctor fails and the command exits non-zero. `restart_required: true` means running servers must restart/reconnect; saving does not reload the in-memory registry. Plan IDs are content checks, not authorization credentials, and a same-name retry never overwrites a profile. See [Agent setup](agent-setup.md) for the complete workflow and error handling.
+
+
+
 Validate a configuration without contacting cloud APIs:
 
 ```sh

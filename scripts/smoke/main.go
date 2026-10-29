@@ -28,7 +28,7 @@ var checks []string
 func main() {
 	flag.StringVar(&binary, "binary", "", "extracted executable")
 	flag.StringVar(&runner, "runner", "", "optional executable prefix, e.g. qemu-aarch64-static")
-	flag.StringVar(&version, "version", "0.1.4", "expected version")
+	flag.StringVar(&version, "version", "0.2.0", "expected version")
 	flag.StringVar(&commit, "commit", "", "expected source commit")
 	flag.StringVar(&targetOS, "os", "", "expected target OS")
 	flag.StringVar(&targetArch, "arch", "", "expected target architecture")
@@ -98,6 +98,9 @@ func smoke() error {
 	if err = stdio(root); err != nil {
 		return err
 	}
+	if err = setupSmoke(); err != nil {
+		return err
+	}
 	return httpSmoke()
 }
 
@@ -151,7 +154,14 @@ func checkCall(response map[string]any) error {
 }
 
 func stdio(root string) error {
-	c := cmd("serve", "--transport", "stdio", "--config", filepath.Join(root, "examples", "config.empty.yaml"))
+	err := stdioCommand(cmd("serve", "--transport", "stdio", "--config", filepath.Join(root, "examples", "config.empty.yaml")))
+	if err == nil {
+		checks = append(checks, "stdio MCP initialize/tools/help/schema/profiles")
+	}
+	return err
+}
+
+func stdioCommand(c *exec.Cmd) error {
 	input, err := c.StdinPipe()
 	if err != nil {
 		return err
@@ -226,7 +236,6 @@ func stdio(root string) error {
 			return err
 		}
 	}
-	checks = append(checks, "stdio MCP initialize/tools/help/schema/profiles")
 	return nil
 }
 

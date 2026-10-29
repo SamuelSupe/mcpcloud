@@ -92,13 +92,17 @@ func build() error {
 		return err
 	}
 	files := map[string]string{
-		"docs/install.zh-CN.md":        "docs/install.zh-CN.md",
-		"docs/permissions.md":          "docs/permissions.md",
-		"docs/dsl.md":                  "docs/dsl.md",
-		"docs/release-platforms.md":    "docs/release-platforms.md",
-		"RELEASE_NOTES.md":             "docs/releases/" + *version + ".md",
-		"examples/config.example.yaml": "examples/config.example.yaml",
-		"examples/config.empty.yaml":   "examples/config.empty.yaml",
+		"docs/install.zh-CN.md":         "docs/install.zh-CN.md",
+		"docs/setup.zh-CN.md":           "docs/setup.zh-CN.md",
+		"docs/agent-setup.md":           "docs/agent-setup.md",
+		"docs/configuration.md":         "docs/configuration.md",
+		"docs/permissions.md":           "docs/permissions.md",
+		"docs/dsl.md":                   "docs/dsl.md",
+		"docs/release-platforms.md":     "docs/release-platforms.md",
+		"RELEASE_NOTES.md":              "docs/releases/" + *version + ".md",
+		"examples/config.example.yaml":  "examples/config.example.yaml",
+		"examples/profile.request.json": "examples/profile.request.json",
+		"examples/config.empty.yaml":    "examples/config.empty.yaml",
 	}
 	var shared []entry
 	for destination, source := range files {

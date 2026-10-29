@@ -29,7 +29,7 @@ jobs:
         run: |
           set -euo pipefail
           go test -count=1 ./... | tee "$RUNNER_TEMP/unit-tests.txt"
-          go run ./scripts/release --version v0.1.4 --out dist
+          go run ./scripts/release --version v0.2.0 --out dist
           cp "$RUNNER_TEMP/unit-tests.txt" dist/unit-tests.txt
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -99,8 +99,8 @@ jobs:
           tar -xf $path -C extracted
           if ($LASTEXITCODE) { throw 'Extraction failed' }
           $suffix = if ($env:TEST_OS -eq 'windows') { '.exe' } else { '' }
-          $binary = Join-Path $PWD "extracted/mcpcloud_v0.1.4_$($env:TEST_OS)_$($env:TEST_ARCH)/mcpcloud$suffix"
-          go run ./scripts/smoke --binary $binary --version 0.1.4 --commit $env:GITHUB_SHA --os $env:TEST_OS --arch $env:TEST_ARCH --out smoke.json
+          $binary = Join-Path $PWD "extracted/mcpcloud_v0.2.0_$($env:TEST_OS)_$($env:TEST_ARCH)/mcpcloud$suffix"
+          go run ./scripts/smoke --binary $binary --version 0.2.0 --commit $env:GITHUB_SHA --os $env:TEST_OS --arch $env:TEST_ARCH --out smoke.json
           if ($LASTEXITCODE) { throw 'Package smoke verification failed' }
           $result = Get-Content smoke.json -Raw | ConvertFrom-Json
           $result | Add-Member -NotePropertyName vm_image -NotePropertyValue $env:VM_IMAGE

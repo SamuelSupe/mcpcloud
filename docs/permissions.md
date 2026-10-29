@@ -10,6 +10,27 @@ Give each profile the smallest provider-native read-only role set needed by its 
 - If `metrics` or `costs` is used, add only the provider-specific read permissions in the connector baseline below. These are DSL connector calls, not `cloud_native_read` operations, and their implemented status does not prove live credentials, permissions, or data. The 63 product operations do not expose metrics or costs. Metrics connectors read configured metric values; they do not read log-event bodies, object bodies, database rows, messages, secrets, or credential values.
 - Logging metadata may be classified from inventory responses, but no log-event connector is active. Do not grant database-data read, message consume, secret-value read or log-event read. Object metadata operations may require provider object-read permissions; the implementation must not download object bodies. Optional Kubernetes Node/Pod and capacity operations require a reachable Kubernetes API and narrowly scoped read-only RBAC; do not grant Kubernetes admin, Secret read, exec or write access.
 
+Codex native client generation/installation (`client-config --client codex [--install]`) is entirely local. It writes environment variable names, never credential values, and preserves existing Codex approval/tool policies and disabled servers. The Codex launch environment must supply the referenced identity; registering the server does not grant cloud permissions or verify connectivity.
+
+## Optional setup discovery
+
+The `init` and `configure --discover` commands (available since v0.2.0) can read scope candidates before the user confirms a profile. Neither treats discovered candidates as permission grants or automatically selects every account/project/subscription. `init --offline` disables discovery and the post-save cloud probe. Configure preview is always offline; `configure --apply --offline` skips its post-save cloud probe, while `--discover` cannot be combined with `--offline`. Failed discovery allows manual scope IDs (the wizard continues; configure returns a safe error). Do not broaden service permissions merely to populate a candidate list.
+
+| Provider | Fixed setup read |
+| --- | --- |
+| AWS | STS `GetCallerIdentity`, using the selected SDK identity and optional assumed role |
+| GCP | [Resource Manager v3 projects.search](https://docs.cloud.google.com/resource-manager/reference/rest/v3/projects/search), one page of up to 100 projects visible through `resourcemanager.projects.get` |
+| Azure | [ARM subscriptions.list](https://learn.microsoft.com/rest/api/resources/subscriptions/list), one page |
+| Alibaba | [STS GetCallerIdentity](https://www.alibabacloud.com/help/en/ram/developer-reference/api-sts-2015-04-01-getcalleridentity) |
+| Huawei | No additional discovery API; manually enter project IDs from API Credentials |
+| Tencent | STS `GetCallerIdentity` (`2018-08-13`) |
+| Volcengine | STS `GetCallerIdentity` through the installed SDK |
+
+These are CLI setup operations, not additions to the `cloud_native_read` allowlist. Resource Manager/ARM candidate discovery may need permissions separate from inventory. Lists with subsequent pages are explicitly marked incomplete; the CLI does not follow returned pagination links. Doctor uses the existing bounded inventory probe; metrics, costs, IAM and resource-detail permissions remain unverified until an appropriate representative query succeeds. Neither setup nor doctor writes cloud IAM policy.
+
+Non-interactive `configure` preview does not call cloud APIs. Apply changes the explicitly selected local configuration file and then runs doctor, unless cloud checks are skipped with `--offline`. It never grants cloud IAM. Its plan ID binds request/path/file contents to prevent stale writes; it does not prove user approval. Agents must use the user's actual authorization for the reviewed scope, as described in the [Agent runbook](agent-setup.md).
+
+
 ## Current inventory operation and least-privilege baseline
 
 This table covers only inventory API operations invoked by the current source adapters. It is an implementation baseline, not evidence of live access. `LIVE VALIDATION REQUIRED` is intentional where the provider's public documentation did not provide an unambiguous action/reader mapping for this exact operation. Confirm those entries in the target account's policy simulator or IAM console before live acceptance.

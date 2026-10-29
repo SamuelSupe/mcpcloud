@@ -21,6 +21,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.7
 	github.com/huaweicloud/huaweicloud-sdk-go-v3 v0.1.212
 	github.com/modelcontextprotocol/go-sdk v1.7.0
+	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.3.168
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.75
 	github.com/volcengine/ve-tos-golang-sdk/v2 v2.9.8

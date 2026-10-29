@@ -6,35 +6,35 @@ MCPCloud 为 MCP 客户端提供七云资源、服务详情、监控和费用查
 
 | 系统 / 架构 | 程序包 | 适用设备 |
 | --- | --- | --- |
-| Windows amd64 | `mcpcloud_v0.1.4_windows_amd64.zip` | Intel / AMD 64 位 Windows |
-| Windows arm64 | `mcpcloud_v0.1.4_windows_arm64.zip` | 高通 Snapdragon 等 ARM64 Windows 设备 |
-| Linux amd64 | `mcpcloud_v0.1.4_linux_amd64.tar.gz` | x86_64 Linux 服务器 |
-| Linux arm64 | `mcpcloud_v0.1.4_linux_arm64.tar.gz` | aarch64 Linux 服务器 |
+| Windows amd64 | `mcpcloud_v0.2.0_windows_amd64.zip` | Intel / AMD 64 位 Windows |
+| Windows arm64 | `mcpcloud_v0.2.0_windows_arm64.zip` | 高通 Snapdragon 等 ARM64 Windows 设备 |
+| Linux amd64 | `mcpcloud_v0.2.0_linux_amd64.tar.gz` | x86_64 Linux 服务器 |
+| Linux arm64 | `mcpcloud_v0.2.0_linux_arm64.tar.gz` | aarch64 Linux 服务器 |
 
 Windows 的“设置 → 系统 → 系统信息 → 系统类型”可查看 x64 或 ARM64。amd64 同时适用于 Intel 和 AMD；ARM64 设备使用 arm64 包。下方 Windows 示例按 amd64 展示，ARM64 用户将文件名及解压目录中的 amd64 替换为 arm64。Linux 可用 `uname -m` 查看架构。程序包是可执行文件，无需安装 Go。Linux 程序以 `CGO_ENABLED=0` 构建，但访问云 API 仍需系统 CA 证书、正确时间和网络连接。Windows 请使用仍受支持的 64 位系统。
 
-本次不提供 Docker 镜像、32 位或 macOS 包。架构依据及后续镜像计划见 [平台说明](https://github.com/SamuelSupe/mcpcloud/blob/v0.1.4/docs/release-platforms.md)。
+本次不提供 Docker 镜像、32 位或 macOS 包。架构依据及后续镜像计划见 [平台说明](https://github.com/SamuelSupe/mcpcloud/blob/v0.2.0/docs/release-platforms.md)。
 
 ## 2. 下载、校验、解压
 
-从 [v0.1.4 Release](https://github.com/SamuelSupe/mcpcloud/releases/tag/v0.1.4) 下载对应程序包与 `SHA256SUMS`。同时提供独立的 `INSTALL.zh-CN.md`，与本说明内容一致。
+从 [v0.2.0 Release](https://github.com/SamuelSupe/mcpcloud/releases/tag/v0.2.0) 下载对应程序包与 `SHA256SUMS`。同时提供独立的 `INSTALL.zh-CN.md`，与本说明内容一致。
 
 Windows PowerShell：
 
 ```powershell
-Get-FileHash .\mcpcloud_v0.1.4_windows_amd64.zip -Algorithm SHA256
+Get-FileHash .\mcpcloud_v0.2.0_windows_amd64.zip -Algorithm SHA256
 # 将 Hash 与 SHA256SUMS 中同名文件逐字比较，匹配后再解压。
-Expand-Archive .\mcpcloud_v0.1.4_windows_amd64.zip -DestinationPath .
-Set-Location .\mcpcloud_v0.1.4_windows_amd64
+Expand-Archive .\mcpcloud_v0.2.0_windows_amd64.zip -DestinationPath .
+Set-Location .\mcpcloud_v0.2.0_windows_amd64
 .\mcpcloud.exe version --json
 ```
 
 Linux（将 amd64 替换为实际下载的架构）：
 
 ```sh
-grep '  mcpcloud_v0.1.4_linux_amd64.tar.gz$' SHA256SUMS | sha256sum -c -
-tar -xzf mcpcloud_v0.1.4_linux_amd64.tar.gz
-cd mcpcloud_v0.1.4_linux_amd64
+grep '  mcpcloud_v0.2.0_linux_amd64.tar.gz$' SHA256SUMS | sha256sum -c -
+tar -xzf mcpcloud_v0.2.0_linux_amd64.tar.gz
+cd mcpcloud_v0.2.0_linux_amd64
 ./mcpcloud version --json
 ```
 
@@ -58,7 +58,15 @@ cd mcpcloud_v0.1.4_linux_amd64
 
 ## 4. 配置云账号和只读权限
 
-将 `examples/config.example.yaml` 复制为 `config.yaml`。仅保留需要使用的 profile，填写自己的账号 / 项目 / 订阅以及地域、服务范围；示例中的标识均为占位符。云身份使用独立的只读身份，不使用管理员账号运行日常查询。
+v0.2.0 发布包提供 `init` 两步向导与 `doctor` 诊断，详见 [初始化指南](setup.zh-CN.md)。解压后可直接运行：
+
+```sh
+./mcpcloud init --config ./config.yaml
+./mcpcloud doctor --config ./config.yaml --json
+```
+
+
+如果选择手工配置，可将 `examples/config.example.yaml` 复制为 `config.yaml`。仅保留需要使用的 profile，填写自己的账号 / 项目 / 订阅以及地域、服务范围；示例中的标识均为占位符。云身份使用独立的只读身份，不使用管理员账号运行日常查询。
 
 | 云 | 凭证接入 | 基础查询条件 |
 | --- | --- | --- |
@@ -70,7 +78,7 @@ cd mcpcloud_v0.1.4_linux_amd64
 | 华为云 | `HUAWEICLOUD_SDK_AK`、`HUAWEICLOUD_SDK_SK`；临时 OBS 身份设置 `HUAWEICLOUD_SDK_SECURITY_TOKEN` | 明确 Project ID / Region；RMS、CES、产品详情和 BSS 费用按需授予读取权限，并配置账单站点。 |
 | 火山引擎 | `VOLCENGINE_ACCESS_KEY_ID`、`VOLCENGINE_SECRET_ACCESS_KEY`，临时身份另用会话令牌 | 配置账号和地域范围，授予资源中心、监控、费用及所选固定详情的读取权限。 |
 
-权限接口参考：[权限清单](https://github.com/SamuelSupe/mcpcloud/blob/v0.1.4/docs/permissions.md)。该清单包含基础接口说明；准确操作目录以运行版本的 `cloud_schema` 为准。云凭证保存在外部环境、凭证文件或云原生身份系统中，不放入程序包、客户端对话或 Git。
+权限接口参考：[权限清单](https://github.com/SamuelSupe/mcpcloud/blob/v0.2.0/docs/permissions.md)。该清单包含基础接口说明；准确操作目录以运行版本的 `cloud_schema` 为准。云凭证保存在外部环境、凭证文件或云原生身份系统中，不放入程序包、客户端对话或 Git。
 
 腾讯云使用已验证的八类资源直查时，在 profile 的 `options` 中设置：
 
@@ -92,9 +100,14 @@ options:
 
 Windows 将 `./mcpcloud` 换为 `.\mcpcloud.exe`。`validate-config` 通过只表示配置可加载；`probe-profile` 验证有限的库存读取，不代表所有详情、监控和费用接口都已授权。
 
+使用可执行本机命令的 Agent 时，v0.2.0 也提供 `configure` 非交互入口。先预览、按具体授权保存，再诊断和重连；见 [Agent 操作说明](agent-setup.md)。这不会新增 MCP 配置工具；取得客户端接入授权后，可再执行 `client-config --client codex --install`。
+
 ## 5. 接入 MCP 客户端
 
 ### 本机使用：stdio
+
+可用 `./mcpcloud client-config --config ./config.yaml --output ./mcpcloud-client.json` 生成下述格式。它会填写当前可执行文件和配置文件的绝对路径，不写入凭证值，也不覆盖已有客户端文件。
+
 
 客户端启动 MCPCloud，并通过标准输入输出连接。先用空配置确认连接，再切换为自己的 `config.yaml`。通用客户端配置示例：
 
@@ -111,7 +124,16 @@ Windows 将 `./mcpcloud` 换为 `.\mcpcloud.exe`。`validate-config` 通过只�
 
 Windows 的 `command` 使用完整 exe 路径，JSON 中的反斜杠要写成 `\\`。不同客户端的配置文件入口不同，但程序、参数及凭证环境必须指向同一运行主机。
 
-Codex CLI 可使用：
+可直接生成 Codex 原生配置并自动合并已有设置：
+
+```sh
+./mcpcloud client-config --client codex --config ./config.yaml
+./mcpcloud client-config --client codex --config ./config.yaml --install
+```
+
+安装目标默认是 `$CODEX_HOME/config.toml` 或 `~/.codex/config.toml`，可用 `--codex-config PATH` 指定其他文件。同名冲突会报错，已有设置、注释和其他 MCP 服务器保留。安装不依赖 Codex CLI，也不会自动重启当前会话；需在 Codex 中重新连接后验证。凭证只通过 `env_vars` 引用，补充变量使用 `--env-var NAME`。完整状态、冲突处理和项目配置限制见 [初始化说明](setup.zh-CN.md#codex-原生配置与自动接入)。
+
+手工接入也可使用 Codex CLI（已有同名项时先核对；环境变量转发另按 Codex 设置配置）：
 
 ```sh
 codex mcp add mcpcloud -- /absolute/path/mcpcloud serve --transport stdio --config /absolute/path/config.yaml
@@ -192,7 +214,7 @@ costs | scope profile in ("YOUR_PROFILE") | range last 7d | summarize sum(amount
 metrics | scope provider in ("tencent"), profile in ("YOUR_PROFILE"), region in ("YOUR_REGION") | where metric == "QCE/CVM::CpuUsage?InstanceId=YOUR_INSTANCE_ID" | range last 10m | step 10s | fields timestamp, value, unit | limit 100
 ```
 
-分页要继续使用返回的游标，直到没有继续页；`status=partial/failed` 或截断结果不能当作完整结果。更完整语法见 [DSL 说明](https://github.com/SamuelSupe/mcpcloud/blob/v0.1.4/docs/dsl.md)。
+分页要继续使用返回的游标，直到没有继续页；`status=partial/failed` 或截断结果不能当作完整结果。更完整语法见 [DSL 说明](https://github.com/SamuelSupe/mcpcloud/blob/v0.2.0/docs/dsl.md)。
 
 ## 7. 常见问题与已知限制
 

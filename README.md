@@ -2,7 +2,7 @@
 
 `mcpcloud` is a Go MCP server for read-only cloud control-plane discovery. It presents one small, provider-neutral query language and a provider adapter registry for AWS, GCP, Azure, Alibaba Cloud, Huawei Cloud, Tencent Cloud, and Volcengine. All seven providers have resource-inventory adapters backed by their resource explorer, resource graph, resource center, or equivalent inventory APIs. Each adapter also registers the same nine product-level native suffixes, for 63 provider-qualified operations in total, plus one service-level compute-instance detail operation and at least two managed database/cache/Kubernetes detail operations. Volcengine also exposes two cluster-scoped VKE topology list operations and ten fixed CLB, EIP, public/private-NAT, and TOS configuration operations. The service operations use fixed provider read APIs and return only normalized metadata. The DSL is the normal interface; the native tool is deliberately constrained to registered typed operations. A separate CLI/HTTP readiness gate performs a bounded fixed inventory probe without changing the six-tool MCP surface.
 
-> Release: Windows amd64 and arm64, plus Linux amd64 and arm64 packages are available from [GitHub Releases](https://github.com/SamuelSupe/mcpcloud/releases). Start with the [Chinese installation and client guide](docs/install.zh-CN.md), [platform coverage](docs/release-platforms.md), [release notes](docs/releases/v0.1.4.md), and [changelog](CHANGELOG.md). This release fixes CES pagination, GCP hierarchy-scoped details and cost cursor binding, AWS IAM search filtering, changing billing totals, and readiness probe cancellation. Live access still depends on each account's permissions, billing exports, monitoring data and network access. Azure Sponsorship cost access and complete cross-service cloud audit coverage remain outside the passed evidence. Runtime capability metadata is authoritative for registered operations.
+> Release: Windows amd64 and arm64, plus Linux amd64 and arm64 packages are available from [GitHub Releases](https://github.com/SamuelSupe/mcpcloud/releases). Start with the [Chinese installation and client guide](docs/install.zh-CN.md), [platform coverage](docs/release-platforms.md), [release notes](docs/releases/v0.2.0.md), and [changelog](CHANGELOG.md). Version 0.2.0 adds two-step initialization, diagnostic checks, non-interactive Agent configuration, and native Codex configuration generation and registration. Live access still depends on each account's permissions, billing exports, monitoring data and network access. Azure Sponsorship cost access and complete cross-service cloud audit coverage remain outside the passed evidence. Runtime capability metadata is authoritative for registered operations.
 ## Safety boundary
 
 The server is control-plane read-only. The DSL does not accept provider-native query-language strings, arbitrary provider actions, or arbitrary URLs. `cloud_native_read` accepts only the exact typed parameters declared by the selected registered operation. The 63 product-level operations use the provider-specific schemas in [docs/tools.md](docs/tools.md) and fixed inventory/resource-graph backends; the seven compute and 16 managed database/cache/Kubernetes/storage detail operations use fixed provider service read APIs and an allow-listed normalized row. Neither class returns a complete SDK response. The call remains constrained by the profile scope, operation allow-list, and parameter schema. It must not return object bodies, database rows, database endpoints, connection strings, messages, message bodies, log events, kubeconfigs, certificates, tokens, secret values, private keys, credentials, user/custom data, console/VNC material, or other data-plane fields. `native` fields are opt-in and come only from adapter-controlled normalized metadata.
@@ -49,6 +49,36 @@ Minimal MCP inputs:
 Metrics and costs remain DSL-only. Their help topic gives only restricted DSL selector examples or resource-dimension placeholders; it does not accept original-provider query language or arbitrary actions. Use `native` guidance only when normalized DSL fields are insufficient, then call `cloud_schema` and select an operation already present in `cloud_schema.operations`; never invent an operation or `params`, and treat dynamic registrations as schema-authoritative. Do not place credentials, provider-native query strings, arbitrary URLs/actions, cursors, or sensitive data in help input or examples. `cloud_query` cursors remain opaque and short-lived; native inventory cursors are passed only as returned, while fixed service-detail operations reject cursors unless cloud_schema describes pagination. The readiness probe is a CLI/HTTP gate, not an additional MCP tool; the MCP surface remains exactly the six tools listed above.
 
 ## Quick start
+
+Version 0.2.0 includes a two-step setup wizard, diagnostic checks, Agent configuration, and MCP client configuration generation. Use a release binary or build from source:
+
+```sh
+go build -o mcpcloud ./cmd/mcpcloud
+./mcpcloud init --config ./config.yaml
+./mcpcloud doctor --config ./config.yaml --json
+./mcpcloud client-config --config ./config.yaml --output ./mcpcloud-client.json
+```
+
+`init` saves credential references and explicitly confirmed scopes, preserves existing profiles, then checks the connection. `--offline` prepares configuration without cloud calls. `doctor` distinguishes local prerequisites, verified inventory reads, scope evidence, and untested metrics/cost/detail permissions. The generator emits absolute-path `mcpServers` JSON by default. `--client codex` emits native TOML; add `--install` to merge it into Codex settings while preserving existing servers, settings and comments. Credentials are forwarded by variable name, never copied. See the [setup guide](docs/setup.zh-CN.md) for supported discovery, exit statuses, and limits.
+
+For Codex, generate a preview and then register the server:
+
+```sh
+./mcpcloud client-config --client codex --config ./config.yaml
+./mcpcloud client-config --client codex --config ./config.yaml --install
+```
+
+Registration targets `$CODEX_HOME/config.toml` (or `~/.codex/config.toml`); use `--codex-config PATH` with `--install` for an explicit project/profile file. Matching entries are unchanged; conflicts fail without overwriting. Restart/reconnect the MCP server in Codex, then verify `cloud_profiles` and a small query. Registration itself does not verify a live connection or cloud permissions.
+
+For agents with local command access, `configure` accepts a bounded JSON request and returns JSON without interactive prompts. It defaults to an offline preview; `--apply --plan-id ID` adds the reviewed profile and runs doctor. The plan ID detects changes to the request, destination or existing configuration; it is not user authorization. Optional `--discover` returns scope candidates without saving. See the [Agent setup runbook](docs/agent-setup.md) and [request example](examples/profile.request.json). Existing MCP tools remain read-only.
+
+```sh
+./mcpcloud configure --input request.json --config ./config.yaml
+# After reviewing plan.request and obtaining authorization for this exact change:
+./mcpcloud configure --input request.json --config ./config.yaml --apply --plan-id PLAN_ID_FROM_PREVIEW
+```
+
+
 
 Build and validate the local binary:
 
@@ -153,6 +183,8 @@ Region handling is source/provider-specific. Azure subscription metrics require 
 
 - [DSL reference](docs/dsl.md)
 - [MCP tool reference](docs/tools.md)
+- [Two-step setup and diagnostics](docs/setup.zh-CN.md)
+- [Agent setup runbook](docs/agent-setup.md)
 - [Configuration and runtime](docs/configuration.md)
 - [Provider capability and readiness matrix](docs/providers.md)
 - [Read-only and least-privilege guidance](docs/permissions.md)
