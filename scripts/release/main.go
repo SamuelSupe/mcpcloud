@@ -97,6 +97,8 @@ func build() error {
 		"docs/agent-setup.md":           "docs/agent-setup.md",
 		"docs/configuration.md":         "docs/configuration.md",
 		"docs/permissions.md":           "docs/permissions.md",
+		"docs/tools.md":                 "docs/tools.md",
+		"docs/providers.md":             "docs/providers.md",
 		"docs/dsl.md":                   "docs/dsl.md",
 		"docs/release-platforms.md":     "docs/release-platforms.md",
 		"RELEASE_NOTES.md":              "docs/releases/" + *version + ".md",

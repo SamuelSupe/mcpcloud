@@ -58,7 +58,7 @@ cd mcpcloud_v0.2.0_linux_amd64
 
 ## 4. 配置云账号和只读权限
 
-v0.2.0 发布包提供 `init` 两步向导与 `doctor` 诊断，详见 [初始化指南](setup.zh-CN.md)。解压后可直接运行：
+v0.2.0 发布包提供 `init` 两步向导与 `doctor` 诊断，详见 [初始化指南](https://github.com/SamuelSupe/mcpcloud/blob/v0.2.0/docs/setup.zh-CN.md)。解压后可直接运行：
 
 ```sh
 ./mcpcloud init --config ./config.yaml
@@ -100,7 +100,7 @@ options:
 
 Windows 将 `./mcpcloud` 换为 `.\mcpcloud.exe`。`validate-config` 通过只表示配置可加载；`probe-profile` 验证有限的库存读取，不代表所有详情、监控和费用接口都已授权。
 
-使用可执行本机命令的 Agent 时，v0.2.0 也提供 `configure` 非交互入口。先预览、按具体授权保存，再诊断和重连；见 [Agent 操作说明](agent-setup.md)。这不会新增 MCP 配置工具；取得客户端接入授权后，可再执行 `client-config --client codex --install`。
+使用可执行本机命令的 Agent 时，v0.2.0 也提供 `configure` 非交互入口。先预览、按具体授权保存，再诊断和重连；见 [Agent 操作说明](https://github.com/SamuelSupe/mcpcloud/blob/v0.2.0/docs/agent-setup.md)。这不会新增 MCP 配置工具；取得客户端接入授权后，可再执行 `client-config --client codex --install`。
 
 ## 5. 接入 MCP 客户端
 
@@ -131,7 +131,7 @@ Windows 的 `command` 使用完整 exe 路径，JSON 中的反斜杠要写成 `\
 ./mcpcloud client-config --client codex --config ./config.yaml --install
 ```
 
-安装目标默认是 `$CODEX_HOME/config.toml` 或 `~/.codex/config.toml`，可用 `--codex-config PATH` 指定其他文件。同名冲突会报错，已有设置、注释和其他 MCP 服务器保留。安装不依赖 Codex CLI，也不会自动重启当前会话；需在 Codex 中重新连接后验证。凭证只通过 `env_vars` 引用，补充变量使用 `--env-var NAME`。完整状态、冲突处理和项目配置限制见 [初始化说明](setup.zh-CN.md#codex-原生配置与自动接入)。
+安装目标默认是 `$CODEX_HOME/config.toml` 或 `~/.codex/config.toml`，可用 `--codex-config PATH` 指定其他文件。同名冲突会报错，已有设置、注释和其他 MCP 服务器保留。安装不依赖 Codex CLI，也不会自动重启当前会话；需在 Codex 中重新连接后验证。凭证只通过 `env_vars` 引用，补充变量使用 `--env-var NAME`。完整状态、冲突处理和项目配置限制见 [初始化说明](https://github.com/SamuelSupe/mcpcloud/blob/v0.2.0/docs/setup.zh-CN.md#codex-原生配置与自动接入)。
 
 手工接入也可使用 Codex CLI（已有同名项时先核对；环境变量转发另按 Codex 设置配置）：
 
