@@ -2,19 +2,20 @@ package providers
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/bssopenapi"
 	"mcpcloud/internal/config"
 	"mcpcloud/internal/provider"
-	"testing"
-	"time"
 )
 
 func dailyResponse(day string) *bssopenapi.QueryInstanceBillResponse {
 	r := bssopenapi.CreateQueryInstanceBillResponse()
 	r.Success = true
 	r.Data.PageNum = 1
-	r.Data.PageSize = 2
+	r.Data.PageSize = 300
 	r.Data.TotalCount = 2
 	r.Data.AccountID = "123"
 	r.Data.Items.Item = []bssopenapi.Item{{BillingDate: day, OwnerID: "123", Currency: "CNY", Region: "华东2（上海）", PretaxAmount: 1.25}, {BillingDate: day, OwnerID: "999", Currency: "CNY", PretaxAmount: 100}}
@@ -33,7 +34,7 @@ func TestAlibabaDailyCostsRequestsAndScope(t *testing.T) {
 			t.Fatal(e)
 		}
 		q := r.GetQueryParams()
-		if q["OwnerId"] != "" || q["BillOwnerId"] != "123" || q["Granularity"] != "DAILY" || q["BillingDate"] != "2026-09-03" || q["BillingCycle"] != "2026-09" {
+		if q["OwnerId"] != "" || q["BillOwnerId"] != "123" || q["Granularity"] != "DAILY" || q["BillingDate"] != "2026-09-03" || q["BillingCycle"] != "2026-09" || q["PageSize"] != "300" || q["PageNum"] != "1" {
 			t.Fatalf("request=%v", q)
 		}
 		return dailyResponse("2026-09-03"), nil
@@ -60,17 +61,29 @@ func TestAlibabaDailyCostsBoundaries(t *testing.T) {
 	end := day.AddDate(0, 0, 2)
 	a := &alibabaAdapter{profile: config.Profile{Regions: []string{"cn-shanghai"}}}
 	r := dailyResponse("2026-09-30")
-	r.Data.TotalCount = 3
-	p, e := a.alibabaDailyPage(r, []string{"123"}, day, end, 1, 2)
+	r.Data.TotalCount = 301
+	r.Data.Items.Item = make([]bssopenapi.Item, 300)
+	for i := range r.Data.Items.Item {
+		r.Data.Items.Item[i] = bssopenapi.Item{BillingDate: "2026-09-30", OwnerID: "123", Currency: "CNY", PretaxAmount: float64(i + 1)}
+	}
+	p, e := a.alibabaDailyPage(r, []string{"123"}, day, end, periodCursor{Period: "2026-09-30", Page: 1}, 2)
 	if e != nil {
 		t.Fatal(e)
 	}
 	c, _ := decodePeriodCursor(p.NextToken)
-	if c.Page != 2 || c.Period != "2026-09-30" {
+	if c.Page != 1 || c.Offset != 2 || c.Total != 301 || c.Period != "2026-09-30" {
 		t.Fatal(c)
 	}
-	r.Data.TotalCount = 2
-	p, e = a.alibabaDailyPage(r, []string{"123"}, day, end, 1, 2)
+	p, e = a.alibabaDailyPage(r, []string{"123"}, day, end, c, 2)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if len(p.Rows) != 2 || p.Rows[0]["amount"] == 1.25 || p.Rows[0]["amount"] != 3.0 {
+		t.Fatalf("second local slice=%+v", p.Rows)
+	}
+	r.Data.PageNum = 2
+	r.Data.Items.Item = []bssopenapi.Item{{BillingDate: "2026-09-30", OwnerID: "123", Currency: "CNY", PretaxAmount: 301}}
+	p, e = a.alibabaDailyPage(r, []string{"123"}, day, end, periodCursor{Period: "2026-09-30", Page: 2, Total: 301}, 2)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -81,13 +94,13 @@ func TestAlibabaDailyCostsBoundaries(t *testing.T) {
 	for _, mutate := range []func(*bssopenapi.QueryInstanceBillResponse){func(r *bssopenapi.QueryInstanceBillResponse) { r.Data.Items.Item[0].BillingDate = "" }, func(r *bssopenapi.QueryInstanceBillResponse) { r.Data.Items.Item[0].Currency = "" }, func(r *bssopenapi.QueryInstanceBillResponse) { r.Data.TotalCount = 50001 }, func(r *bssopenapi.QueryInstanceBillResponse) { r.Data.Items.Item = nil }} {
 		r := dailyResponse("2026-09-30")
 		mutate(r)
-		if _, e := a.alibabaDailyPage(r, []string{"123"}, day, end, 1, 2); !hasProviderErrorCode(e, "invalid_provider_response") {
+		if _, e := a.alibabaDailyPage(r, []string{"123"}, day, end, periodCursor{Period: "2026-09-30", Page: 1}, 2); !hasProviderErrorCode(e, "invalid_provider_response") {
 			t.Fatalf("error=%v", e)
 		}
 	}
 	r = dailyResponse("2026-09-30")
 	r.Data.Items.Item[0].Region = "未知区域"
-	p, e = a.alibabaDailyPage(r, []string{"123"}, day, end, 1, 2)
+	p, e = a.alibabaDailyPage(r, []string{"123"}, day, end, periodCursor{Period: "2026-09-30", Page: 1}, 2)
 	if e != nil || len(p.Rows) != 0 {
 		t.Fatalf("unknown region must not bypass scope: %+v %v", p, e)
 	}

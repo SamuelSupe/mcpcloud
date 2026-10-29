@@ -39,18 +39,34 @@ func TestVolcengineNetworkDetailSchemasAndPagination(t *testing.T) {
 			t.Fatalf("%s accepted undeclared parameter", op.Name)
 		}
 	}
-	if _, _, _, err := validateVolcengineNetworkRequest(provider.NativeRequest{Operation: volcengineNATListOperation, Params: map[string]any{"project_name": "default", "network_type": "private"}}); !hasProviderErrorCode(err, "invalid_parameter") {
+	if _, _, _, _, _, err := validateVolcengineNetworkRequest(provider.NativeRequest{Operation: volcengineNATListOperation, Params: map[string]any{"project_name": "default", "network_type": "private"}}); !hasProviderErrorCode(err, "invalid_parameter") {
 		t.Fatalf("invalid NAT network type error = %#v", err)
 	}
-	page := volcengineNetworkPage([]map[string]any{{"id": "one"}}, 1, 1, 2)
-	if page.NextToken != "2" || page.Scanned != 1 || page.Requests != 1 {
+	request := provider.NativeRequest{Operation: volcengineNATListOperation, Region: "cn-north-1", Params: map[string]any{"project_name": "default"}, Limit: 1}
+	providerRows := []map[string]any{{"id": "one"}, {"id": "two"}}
+	page, err := volcengineNetworkPage(providerRows, 1, 100, 0, 1, 101, request)
+	if err != nil || len(page.Rows) != 1 || page.Rows[0]["id"] != "one" || page.Scanned != 1 || page.Requests != 1 {
 		t.Fatalf("first page = %#v", page)
 	}
-	page = volcengineNetworkPage(nil, 2, 1, 2)
-	if page.NextToken != "" || page.Scanned != 0 {
-		t.Fatalf("last page = %#v", page)
+	pageNumber, offset, err := decodeVolcenginePageCursor(page.NextToken, request.Operation, "default", request.Region)
+	if err != nil || pageNumber != 1 || offset != 1 {
+		t.Fatalf("first page cursor = %d/%d, err=%v", pageNumber, offset, err)
 	}
-	if _, _, _, err := validateVolcengineNetworkRequest(provider.NativeRequest{Operation: volcengineCLBListenersOperation, Params: map[string]any{"load_balancer_id": "clb-a"}, PageToken: "not-a-page"}); !hasProviderErrorCode(err, "invalid_cursor") {
+	request.PageToken = page.NextToken
+	page, err = volcengineNetworkPage(providerRows, pageNumber, 100, offset, 1, 101, request)
+	if err != nil || len(page.Rows) != 1 || page.Rows[0]["id"] != "two" {
+		t.Fatalf("second local slice = %#v, err=%v", page, err)
+	}
+	pageNumber, offset, err = decodeVolcenginePageCursor(page.NextToken, request.Operation, "default", request.Region)
+	if err != nil || pageNumber != 2 || offset != 0 {
+		t.Fatalf("next provider page cursor = %d/%d, err=%v", pageNumber, offset, err)
+	}
+	request.PageToken = page.NextToken
+	page, err = volcengineNetworkPage([]map[string]any{{"id": "three"}}, pageNumber, 100, offset, 1, 101, request)
+	if err != nil || page.NextToken != "" || len(page.Rows) != 1 || page.Rows[0]["id"] != "three" {
+		t.Fatalf("last page = %#v, err=%v", page, err)
+	}
+	if _, _, _, _, _, err := validateVolcengineNetworkRequest(provider.NativeRequest{Operation: volcengineCLBListenersOperation, Params: map[string]any{"load_balancer_id": "clb-a"}, PageToken: "not-a-page"}); !hasProviderErrorCode(err, "invalid_cursor") {
 		t.Fatalf("invalid cursor error = %#v", err)
 	}
 }

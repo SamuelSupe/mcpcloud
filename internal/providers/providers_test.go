@@ -1689,7 +1689,8 @@ func TestVolcengineVKEInventoryUsesClusterFilterPaginationAndSafeRows(t *testing
 						SubnetIds:        []*string{volc.String("subnet-a")},
 						InitializeScript: volc.String("must-not-leak"),
 					},
-				}},
+				}, {Id: volc.String("pool-b"), Name: volc.String("workers-b"), ClusterId: volc.String("cluster-a")},
+					{Id: volc.String("pool-c"), Name: volc.String("workers-c"), ClusterId: volc.String("cluster-a")}},
 				TotalCount: volc.Int32(3),
 			},
 			nodeOutput: &volcvke.ListNodesOutput{
@@ -1704,7 +1705,7 @@ func TestVolcengineVKEInventoryUsesClusterFilterPaginationAndSafeRows(t *testing
 					InitializeScript: volc.String("must-not-leak"),
 					KubernetesConfig: &volcvke.KubernetesConfigForListNodesOutput{Cordon: volc.Bool(false)},
 				}},
-				TotalCount: volc.Int32(7),
+				TotalCount: volc.Int32(101),
 			},
 		}
 	}
@@ -1730,11 +1731,15 @@ func TestVolcengineVKEInventoryUsesClusterFilterPaginationAndSafeRows(t *testing
 	poolPage, err := adapter.NativeRead(context.Background(), provider.NativeRequest{
 		Operation: volcengineVKEListNodePoolsOperation, Region: "cn-beijing", Params: map[string]any{"cluster_id": "cluster-a"}, Limit: 1,
 	})
-	if err != nil || len(poolPage.Rows) != 1 || poolPage.NextToken != "2" {
-		t.Fatalf("VKE node pool page = %#v, err=%v, want one row and next page 2", poolPage, err)
+	if err != nil || len(poolPage.Rows) != 1 || poolPage.NextToken == "" {
+		t.Fatalf("VKE node pool page = %#v, err=%v, want one row and a continuation cursor", poolPage, err)
 	}
-	if nodePoolInput == nil || nodePoolInput.Filter == nil || len(nodePoolInput.Filter.ClusterIds) != 1 || volc.StringValue(nodePoolInput.Filter.ClusterIds[0]) != "cluster-a" || volc.Int32Value(nodePoolInput.PageNumber) != 1 || volc.Int32Value(nodePoolInput.PageSize) != 1 {
-		t.Fatalf("VKE node pool input = %#v, want fixed cluster filter and page 1/1", nodePoolInput)
+	pageNumber, offset, err := decodeVolcenginePageCursor(poolPage.NextToken, volcengineVKEListNodePoolsOperation, "cluster-a", "cn-beijing")
+	if err != nil || pageNumber != 1 || offset != 1 {
+		t.Fatalf("VKE node pool cursor = %d/%d, err=%v", pageNumber, offset, err)
+	}
+	if nodePoolInput == nil || nodePoolInput.Filter == nil || len(nodePoolInput.Filter.ClusterIds) != 1 || volc.StringValue(nodePoolInput.Filter.ClusterIds[0]) != "cluster-a" || volc.Int32Value(nodePoolInput.PageNumber) != 1 || volc.Int32Value(nodePoolInput.PageSize) != 100 {
+		t.Fatalf("VKE node pool input = %#v, want fixed cluster filter and page 1/100", nodePoolInput)
 	}
 	poolAttributes := poolPage.Rows[0]["attributes"].(map[string]any)
 	if poolPage.Rows[0]["kind"] != "node_pool" || poolPage.Rows[0]["state"] != "running" || poolAttributes["cluster_id"] != "cluster-a" || poolAttributes["node_count"] != 6 {
@@ -1743,8 +1748,18 @@ func TestVolcengineVKEInventoryUsesClusterFilterPaginationAndSafeRows(t *testing
 	if strings.Contains(fmt.Sprint(poolPage.Rows[0]), "must-not-leak") {
 		t.Fatalf("VKE node pool row leaked initialization script: %#v", poolPage.Rows[0])
 	}
+	poolPage, err = adapter.NativeRead(context.Background(), provider.NativeRequest{
+		Operation: volcengineVKEListNodePoolsOperation, Region: "cn-beijing", Params: map[string]any{"cluster_id": "cluster-a"}, PageToken: poolPage.NextToken, Limit: 2,
+	})
+	if err != nil || len(poolPage.Rows) != 2 || poolPage.Rows[0]["id"] != "pool-b" || poolPage.Rows[1]["id"] != "pool-c" || poolPage.NextToken != "" {
+		t.Fatalf("VKE node pool continuation = %#v, err=%v, want remaining rows exactly once", poolPage, err)
+	}
+	if volc.Int32Value(nodePoolInput.PageNumber) != 1 || volc.Int32Value(nodePoolInput.PageSize) != 100 {
+		t.Fatalf("VKE node pool continuation request = %#v, want same provider page 1/100", nodePoolInput)
+	}
+	nodeCursor := encodeVolcenginePageCursor(volcenginePageCursor{Operation: volcengineVKEListNodesOperation, ID: "cluster-a", Region: "cn-beijing", Page: 2})
 	nodePage, err := adapter.NativeRead(context.Background(), provider.NativeRequest{
-		Operation: volcengineVKEListNodesOperation, Region: "cn-beijing", Params: map[string]any{"cluster_id": "cluster-a"}, PageToken: "2", Limit: 100,
+		Operation: volcengineVKEListNodesOperation, Region: "cn-beijing", Params: map[string]any{"cluster_id": "cluster-a"}, PageToken: nodeCursor, Limit: 100,
 	})
 	if err != nil || len(nodePage.Rows) != 1 || nodePage.NextToken != "" {
 		t.Fatalf("VKE node page = %#v, err=%v, want one final row", nodePage, err)
@@ -1759,7 +1774,7 @@ func TestVolcengineVKEInventoryUsesClusterFilterPaginationAndSafeRows(t *testing
 	if strings.Contains(fmt.Sprint(nodePage.Rows[0]), "must-not-leak") {
 		t.Fatalf("VKE node row leaked initialization script: %#v", nodePage.Rows[0])
 	}
-	if _, _, _, err := validateVolcengineVKEInventoryRequest(provider.NativeRequest{Operation: volcengineVKEListNodesOperation, Params: map[string]any{"cluster_id": "cluster-a"}, PageToken: "opaque"}); !hasProviderErrorCode(err, "invalid_cursor") {
+	if _, _, _, _, _, err := validateVolcengineVKEInventoryRequest(provider.NativeRequest{Operation: volcengineVKEListNodesOperation, Params: map[string]any{"cluster_id": "cluster-a"}, PageToken: "opaque"}); !hasProviderErrorCode(err, "invalid_cursor") {
 		t.Fatalf("VKE invalid cursor error = %#v, want invalid_cursor", err)
 	}
 }
