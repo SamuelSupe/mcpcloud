@@ -18,7 +18,9 @@ type Coordinator struct {
 	now     func() time.Time
 
 	mu         sync.Mutex
+	hasCached  bool
 	cached     Report
+	cachedErr  error
 	expires    time.Time
 	refreshing bool
 	wait       chan struct{}
@@ -38,13 +40,14 @@ func (c *Coordinator) Current(ctx context.Context) (Report, error) {
 	for {
 		c.mu.Lock()
 		now := c.now()
-		if len(c.cached.Profiles) > 0 && now.Before(c.expires) {
+		if c.hasCached && now.Before(c.expires) {
 			report := c.cached
 			report.Cached = true
 			expires := c.expires
 			report.ExpiresAt = &expires
+			err := c.cachedErr
 			c.mu.Unlock()
-			return report, nil
+			return report, err
 		}
 		if c.refreshing {
 			wait := c.wait
@@ -66,18 +69,15 @@ func (c *Coordinator) Current(ctx context.Context) (Report, error) {
 		cancel()
 
 		c.mu.Lock()
-		if err == nil {
-			c.cached = report
-			c.expires = c.now().Add(c.ttl)
-		}
+		c.cached = report
+		c.cachedErr = err
+		c.hasCached = true
+		c.expires = c.now().Add(c.ttl)
 		expires := c.expires
 		c.refreshing = false
 		close(wait)
 		c.mu.Unlock()
-		if err != nil {
-			return Report{}, err
-		}
 		report.ExpiresAt = &expires
-		return report, nil
+		return report, err
 	}
 }

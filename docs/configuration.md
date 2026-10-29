@@ -101,7 +101,7 @@ HTTP endpoints:
 
 - `/mcp`: MCP Streamable HTTP transport.
 - `/healthz`: process health check.
-- `/readyz`: requires the same Bearer token and Host/Origin checks as `/mcp`. It provides one-minute-TTL-cached fixed profile readiness, calls the bounded inventory probe when the cache expires, returns only aggregate `profiles`, `ready`, `degraded`, and `not_ready` counts plus probe/cache timestamps, and never returns profile rows or credentials. `ready` and `degraded` return HTTP 200; `not_ready` or a probe failure returns HTTP 503.
+- `/readyz`: requires the same Bearer token and Host/Origin checks as `/mcp`. It caches both fixed profile reports and probe errors for one minute from probe completion. Concurrent requests share one refresh; the first request after expiry starts a new bounded inventory probe. Reports contain only aggregate `profiles`, `ready`, `degraded`, and `not_ready` counts plus probe/cache timestamps, and never profile rows or credentials. `ready` and `degraded` return HTTP 200; `not_ready` or a probe failure returns HTTP 503. A probe error returns only `status=not_ready` and `error_code=probe_failed`, without the underlying error message.
 
 Loopback binding, a non-empty Bearer token, and Host/Origin validation are the safe defaults. Configure the token environment variable with `server.auth_token_env` (default `MCPCLOUD_AUTH_TOKEN`); configure `server.allowed_hosts` and `server.allowed_origins` for the deployment. If remote access is required, terminate TLS and enforce network policy in an external reverse proxy. Keep the MCP process bound to a private interface unless the deployment explicitly supplies that boundary.
 

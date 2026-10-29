@@ -434,6 +434,32 @@ func TestCoordinatorReusesTTLAndRefreshesAfterExpiry(t *testing.T) {
 	}
 }
 
+func TestCoordinatorCachesFailedRefreshUntilExpiry(t *testing.T) {
+	base := time.Date(2026, time.August, 25, 0, 0, 0, 0, time.UTC)
+	clock := base
+	probeErr := errors.New("probe failed")
+	runner := &coordinatorRunner{profiles: []string{"aws-prod"}, err: probeErr}
+	coordinator := NewCoordinator(runner, time.Minute, time.Second)
+	coordinator.now = func() time.Time { return clock }
+
+	first, err := coordinator.Current(context.Background())
+	if !errors.Is(err, probeErr) || first.Cached || runner.callCount() != 1 {
+		t.Fatalf("first failed Current() = (%#v, %v), want one uncached probe error", first, err)
+	}
+	second, err := coordinator.Current(context.Background())
+	if !errors.Is(err, probeErr) || !second.Cached || runner.callCount() != 1 {
+		t.Fatalf("cached failed Current() = (%#v, %v), want cached error without another probe", second, err)
+	}
+
+	clock = base.Add(time.Minute + time.Nanosecond)
+	runner.err = nil
+	runner.report = Report{ProbeID: "probe-2", Status: StatusReady, ObservedAt: clock, Profiles: []ProfileResult{{Profile: "aws-prod", Status: StatusReady}}}
+	third, err := coordinator.Current(context.Background())
+	if err != nil || third.Cached || runner.callCount() != 2 {
+		t.Fatalf("expired failed Current() = (%#v, %v), want a fresh probe", third, err)
+	}
+}
+
 func TestCoordinatorSingleFlightsConcurrentRefreshes(t *testing.T) {
 	runner := &coordinatorRunner{
 		profiles: []string{"aws-prod"},
