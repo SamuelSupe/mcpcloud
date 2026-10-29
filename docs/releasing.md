@@ -4,7 +4,7 @@
 
 ```sh
 go test -count=1 ./...
-go run ./scripts/release --version v0.1.1 --out dist
+go run ./scripts/release --version v0.1.2 --out dist
 ```
 
 构建工具只打包固定白名单：程序、安装说明、配置示例、权限 / DSL / 平台说明、更新说明、实际链接依赖的版本列表及其许可 / NOTICE 文件。不复制部署目录、凭证、私有资源记录或当前主机环境文件。Linux 使用静态 Go 构建；四平台内嵌同一源提交和提交 UTC 时间。
@@ -14,7 +14,7 @@ go run ./scripts/release --version v0.1.1 --out dist
 解压后验证实际包内的程序，而非工作树旧程序：
 
 ```sh
-go run ./scripts/smoke --binary /absolute/path/extracted/mcpcloud --version 0.1.1 --commit FULL_RELEASE_COMMIT --os linux --arch amd64 --out verification-linux-amd64.json
+go run ./scripts/smoke --binary /absolute/path/extracted/mcpcloud --version 0.1.2 --commit FULL_RELEASE_COMMIT --os linux --arch amd64 --out verification-linux-amd64.json
 ```
 
 Windows 指定 exe、`--os windows --arch amd64` 或 `--arch arm64`，须在对应架构主机运行。Linux ARM64 若使用仿真，在 Linux amd64 主机添加 `--runner /absolute/path/qemu-aarch64-static --os linux --arch arm64`；结果必须标明仿真。检查不需要云账号，不执行云读取或修改。

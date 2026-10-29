@@ -28,7 +28,7 @@ var checks []string
 func main() {
 	flag.StringVar(&binary, "binary", "", "extracted executable")
 	flag.StringVar(&runner, "runner", "", "optional executable prefix, e.g. qemu-aarch64-static")
-	flag.StringVar(&version, "version", "0.1.1", "expected version")
+	flag.StringVar(&version, "version", "0.1.2", "expected version")
 	flag.StringVar(&commit, "commit", "", "expected source commit")
 	flag.StringVar(&targetOS, "os", "", "expected target OS")
 	flag.StringVar(&targetArch, "arch", "", "expected target architecture")

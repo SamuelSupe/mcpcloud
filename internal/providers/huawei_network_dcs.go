@@ -67,7 +67,9 @@ func (a *huaweiAdapter) listHuaweiNetworkOrDCS(ctx context.Context, r provider.N
 			return provider.Page{}, huaweiDeepError(r.Operation, e)
 		}
 		rows := []map[string]any{}
+		rawCount := 0
 		if out.Instances != nil {
+			rawCount = len(*out.Instances)
 			for _, x := range *out.Instances {
 				if x.InstanceId == nil {
 					continue
@@ -93,10 +95,13 @@ func (a *huaweiAdapter) listHuaweiNetworkOrDCS(ctx context.Context, r provider.N
 			}
 		}
 		next := ""
-		if out.InstanceNum != nil && int64(offset)+int64(len(rows)) < int64(*out.InstanceNum) {
-			next = strconv.FormatInt(int64(offset)+int64(len(rows)), 10)
+		if out.InstanceNum != nil && int64(offset)+int64(rawCount) < int64(*out.InstanceNum) {
+			if rawCount == 0 {
+				return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: r.Operation, Message: "DCS returned an empty page before its total count"}
+			}
+			next = strconv.FormatInt(int64(offset)+int64(rawCount), 10)
 		}
-		return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}, nil
+		return provider.Page{Rows: rows, NextToken: next, Scanned: rawCount, Requests: 1}, nil
 	}
 	region, e := vpcregion.SafeValueOf(regionID)
 	if e != nil {

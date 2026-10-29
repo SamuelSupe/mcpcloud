@@ -130,7 +130,7 @@ costs
 
 Cost queries require `range`; the maximum range is 400 days. Cost rows expose `date`, `amount`, and `currency`, with amount preserved in the provider-reported currency. The engine rejects a non-count amount aggregate unless `currency` is included in the grouping and never performs implicit exchange-rate conversion. Cost connectors issue one global/account/project-level API call per expanded target rather than one call per region. A DSL `scope region` therefore filters returned cost rows locally; it is not a promise that the provider cost API receives a region filter. Tencent's cost API does not return a currency, so its profile must declare `options.billing_currency`; that declaration is attached to normalized rows and is not inferred from the API.
 
-GCP costs read a user-prepared standard Billing Export table through the BigQuery query API. Set `options.billing_table` to `project.dataset.table`; `billing_project` and `billing_location` are optional query-job settings. The service does not enable Billing Export, create datasets, or write billing data. See [configuration](configuration.md) and [permissions](permissions.md) for the required read-only setup. Huawei's `options.billing_site` is required and explicitly selects the `china` or `intl` BSS endpoint; omission is `not_configured` in capabilities and `capability_unavailable` for a cost query. Tencent costs additionally require exactly one `scopes.accounts` entry and the declared `options.billing_currency`.
+GCP costs read a user-prepared standard Billing Export table through the BigQuery query API. Set `options.billing_table` to `project.dataset.table` and configure `scopes.projects` or a project-level `options.asset_scope`; every query filters `project.id` to that project. Organization- and folder-only profiles cannot query costs. `billing_project` and `billing_location` are optional query-job settings. The service does not enable Billing Export, create datasets, or write billing data. See [configuration](configuration.md) and [permissions](permissions.md) for the required read-only setup. Huawei's `options.billing_site` is required and explicitly selects the `china` or `intl` BSS endpoint; omission is `not_configured` in capabilities and `capability_unavailable` for a cost query. Tencent costs additionally require exactly one `scopes.accounts` entry and the declared `options.billing_currency`.
 
 ## Explain before execute
 
@@ -138,7 +138,7 @@ GCP costs read a user-prepared standard Billing Export table through the BigQuer
 
 ## Result contract
 
-`cloud_query` returns a structured result with a status of `ok`, `partial`, or `failed`; columns; rows; optional `next_cursor`; target/coverage information; per-target errors; and request, scan, and truncation statistics.
+`cloud_query` returns a structured result with a status of `ok`, `partial`, or `failed`; columns; rows; optional `next_cursor`; target/coverage information; per-target errors; and request, scan, and truncation statistics. Filter evaluation errors are capped at 100 individual entries per query; additional failures are counted in one `filter_errors_truncated` summary entry.
 
 Normalized resource rows use these stable fields when available:
 

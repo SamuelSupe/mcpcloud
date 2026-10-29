@@ -34,11 +34,25 @@ func (a *azureAdapter) queryMetrics(ctx context.Context, req provider.QueryReque
 	}
 	resourceID := selector.Dimensions["resource_id"]
 	resourcePath := ""
+	metricRegion := req.Region
+	resourceRequests := 0
 	if resourceID != "" {
 		resourcePath, err = azureMetricResourcePath(subscription, selector.Parts[0], resourceID)
 		if err != nil {
 			return provider.Page{}, &provider.Error{Code: "invalid_scope", Operation: azureMetricsOperation, Message: err.Error()}
 		}
+		inventory, inventoryErr := a.graph(ctx, "Resources | where id =~ '"+escapeKQL(resourceID)+"' | project id, location, type, subscriptionId", []string{subscription}, "", 2)
+		if inventoryErr != nil {
+			return provider.Page{}, inventoryErr
+		}
+		if inventory.NextToken != "" || len(inventory.Rows) != 1 || !strings.EqualFold(stringValue(inventory.Rows[0]["id"]), resourceID) {
+			return provider.Page{}, &provider.Error{Code: "invalid_scope", Operation: azureMetricsOperation, Message: "resource_id was not found in the selected subscription"}
+		}
+		metricRegion, err = verifyAzureResourceRegion(stringValue(inventory.Rows[0]["region"]), req.Region, a.profile.Regions, azureMetricsOperation)
+		if err != nil {
+			return provider.Page{}, err
+		}
+		resourceRequests = inventory.Requests
 	}
 	token, err := a.accessToken(ctx, azureMetricsOperation)
 	if err != nil {
@@ -50,7 +64,7 @@ func (a *azureAdapter) queryMetrics(ctx context.Context, req provider.QueryReque
 	}
 	values := url.Values{
 		"api-version":     []string{"2023-10-01"},
-		"region":          []string{req.Region},
+		"region":          []string{metricRegion},
 		"metricnamespace": []string{selector.Parts[0]},
 		"metricnames":     []string{selector.Parts[1]},
 		"timespan":        []string{start.Format(time.RFC3339) + "/" + end.Format(time.RFC3339)},
@@ -138,7 +152,7 @@ func (a *azureAdapter) queryMetrics(ctx context.Context, req provider.QueryReque
 					id = resourceID
 					dimensions["resource_id"] = resourceID
 				}
-				row := metricRow(model.ProviderAzure, a.name, selector.Raw, "monitor", id, req.Region, subscription, timestamp, value, metric.Unit, dimensions)
+				row := metricRow(model.ProviderAzure, a.name, selector.Raw, "monitor", id, metricRegion, subscription, timestamp, value, metric.Unit, dimensions)
 				native := row["native"].(map[string]any)
 				native["metric_namespace"] = selector.Parts[0]
 				native["metric_name"] = metric.Name.Value
@@ -147,7 +161,7 @@ func (a *azureAdapter) queryMetrics(ctx context.Context, req provider.QueryReque
 			}
 		}
 	}
-	return provider.Page{Rows: rows, Scanned: len(rows), Requests: 1}, nil
+	return provider.Page{Rows: rows, Scanned: len(rows), Requests: 1 + resourceRequests}, nil
 }
 
 func (a *azureAdapter) queryCosts(ctx context.Context, req provider.QueryRequest) (provider.Page, error) {

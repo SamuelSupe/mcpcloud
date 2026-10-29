@@ -29,7 +29,7 @@ func (a *scopedAdapter) ConfiguredRegions() []string {
 }
 
 // TargetRegions returns the regions that require separate provider calls. Cost
-// APIs, Azure/GCP IAM, and GCP Monitoring are queried once; the engine
+// APIs, global IAM endpoints, and GCP Monitoring are queried once; the engine
 // applies an explicit DSL region scope to their normalized rows afterward.
 func (a *scopedAdapter) TargetRegions(source model.Source, requested []string) ([]string, error) {
 	for _, region := range requested {
@@ -37,7 +37,7 @@ func (a *scopedAdapter) TargetRegions(source model.Source, requested []string) (
 			return nil, err
 		}
 	}
-	if source == model.SourceCosts || ((a.Provider() == model.ProviderAzure || a.Provider() == model.ProviderGCP) && source == model.SourceIAM) || (a.Provider() == model.ProviderGCP && source == model.SourceMetrics) {
+	if source == model.SourceCosts || ((a.Provider() == model.ProviderAWS || a.Provider() == model.ProviderAzure || a.Provider() == model.ProviderGCP) && source == model.SourceIAM) || (a.Provider() == model.ProviderGCP && source == model.SourceMetrics) {
 		return []string{""}, nil
 	}
 
@@ -47,6 +47,11 @@ func (a *scopedAdapter) TargetRegions(source model.Source, requested []string) (
 			regions = exactRegions(a.profile.Regions)
 		} else {
 			regions = a.ConfiguredRegions()
+		}
+	}
+	if source == model.SourceResources && len(requested) == 0 && len(a.profile.Regions) > 0 && !contains(a.profile.Regions, "*") && (a.Provider() == model.ProviderAzure || a.Provider() == model.ProviderGCP) {
+		if !contains(regions, "global") {
+			regions = append(regions, "global")
 		}
 	}
 	if source == model.SourceMetrics && (a.Provider() == model.ProviderAzure || a.Provider() == model.ProviderTencent) {
@@ -152,6 +157,9 @@ func (a *scopedAdapter) validateRegion(region string) error {
 	if len(a.profile.Regions) == 0 || contains(a.profile.Regions, "*") {
 		return nil
 	}
+	if strings.EqualFold(region, "global") {
+		return nil
+	}
 	if !contains(a.profile.Regions, region) {
 		return &Error{Code: "scope_not_allowed", Message: fmt.Sprintf("region %q is outside the profile allowlist", region)}
 	}
@@ -195,19 +203,13 @@ func (a *scopedAdapter) serviceAllowed(row map[string]any) bool {
 }
 
 func (a *scopedAdapter) rowRegionAllowed(row map[string]any) bool {
-	// Huawei OBS account listings are authorized by the configured profile but
-	// can legitimately contain buckets from more than one region. The marker is
-	// set only by the typed OBS list operation; all other rows retain exact
-	// configured-region enforcement.
-	if a.Provider() == model.ProviderHuawei && row["service"] == "obs" {
-		if accountScoped, _ := row["account_scoped"].(bool); accountScoped {
-			return true
-		}
-	}
 	if len(a.profile.Regions) == 0 || contains(a.profile.Regions, "*") {
 		return true
 	}
 	region, _ := row["region"].(string)
+	if strings.EqualFold(region, "global") {
+		return true
+	}
 	return region == "" || contains(a.profile.Regions, region)
 }
 
@@ -231,9 +233,24 @@ func (a *scopedAdapter) rowScopeAllowed(row map[string]any, source model.Source,
 	}
 	for _, candidate := range allowed {
 		for _, key := range a.scopeKeys(source, candidate) {
-			text, _ := scope[key].(string)
-			if text != "" && (candidate == text || trimScopePrefix(candidate) == trimScopePrefix(text)) {
-				return true
+			switch value := scope[key].(type) {
+			case string:
+				if value != "" && (candidate == value || trimScopePrefix(candidate) == trimScopePrefix(value)) {
+					return true
+				}
+			case []string:
+				for _, text := range value {
+					if text != "" && (candidate == text || trimScopePrefix(candidate) == trimScopePrefix(text)) {
+						return true
+					}
+				}
+			case []any:
+				for _, item := range value {
+					text, _ := item.(string)
+					if text != "" && (candidate == text || trimScopePrefix(candidate) == trimScopePrefix(text)) {
+						return true
+					}
+				}
 			}
 		}
 	}
@@ -246,17 +263,21 @@ func (a *scopedAdapter) scopeKeys(source model.Source, candidate string) []strin
 		candidateID := trimScopePrefix(candidate)
 		organization := strings.HasPrefix(candidate, "organizations/") || contains(a.profile.Scopes.Organizations, candidate) || contains(a.profile.Scopes.Organizations, candidateID)
 		project := strings.HasPrefix(candidate, "projects/") || contains(a.profile.Scopes.Projects, candidate) || contains(a.profile.Scopes.Projects, candidateID)
+		folder := strings.HasPrefix(candidate, "folders/")
 		if configured := a.profile.Options["asset_scope"]; configured != "" && (configured == candidate || trimScopePrefix(configured) == candidateID) {
 			organization = organization || strings.HasPrefix(configured, "organizations/")
 			project = project || strings.HasPrefix(configured, "projects/")
+			folder = folder || strings.HasPrefix(configured, "folders/")
 		}
 		switch {
 		case organization && !project:
 			return []string{"organization_id"}
 		case project && !organization:
 			return []string{"project_id"}
+		case folder && !organization && !project:
+			return []string{"folder_ids"}
 		default:
-			return []string{"organization_id", "project_id"}
+			return []string{"organization_id", "project_id", "folder_ids"}
 		}
 	case model.ProviderAzure:
 		return []string{"subscription_id"}

@@ -54,6 +54,10 @@ func (a *azureAdapter) readLiveNodes(ctx context.Context, req provider.NativeReq
 	if err != nil {
 		return provider.Page{}, err
 	}
+	region, err := a.managedClusterRegion(ctx, token, sub, rg, cluster, req.Region, spec.operation)
+	if err != nil {
+		return provider.Page{}, err
+	}
 	endpoint := "https://management.azure.com/subscriptions/" + url.PathEscape(sub) + "/resourceGroups/" + url.PathEscape(rg) + "/providers/Microsoft.ContainerService/managedClusters/" + url.PathEscape(cluster) + "/listClusterUserCredential?api-version=2025-10-01&format=exec"
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
 	if err != nil {
@@ -154,7 +158,9 @@ func (a *azureAdapter) readLiveNodes(ctx context.Context, req provider.NativeReq
 		return provider.Page{}, &provider.Error{Code: "cluster_api_error", Operation: spec.operation, Message: fmt.Sprintf("Kubernetes list HTTP %d", response.StatusCode)}
 	}
 	if spec.domain == "live_pods" {
-		return decodeLivePods(response.Body, a.Provider(), a.name, sub, req.Region, cluster, req)
+		page, err := decodeLivePods(response.Body, a.Provider(), a.name, sub, region, cluster, req)
+		page.Requests++
+		return page, err
 	}
 	var list struct {
 		Items    []liveNode `json:"items"`
@@ -168,7 +174,8 @@ func (a *azureAdapter) readLiveNodes(ctx context.Context, req provider.NativeReq
 	if list.Metadata.Continue != "" {
 		return provider.Page{}, fmt.Errorf("incomplete node list rejected")
 	}
-	page := liveNodeRows(a.name, sub, req.Region, cluster, list.Items)
+	page := liveNodeRows(a.name, sub, region, cluster, list.Items)
+	page.Requests++
 	for _, row := range page.Rows {
 		row["provider"] = string(model.ProviderAzure)
 		scope := row["scope"].(map[string]any)

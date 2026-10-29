@@ -8,6 +8,8 @@ Use `cloud_native_read` with profile, exact region, operation, empty params, and
 | `aws.ec2.describe_addresses` | Unpaginated; returns all addresses; cursor rejected |
 | `aws.rds.describe_db_instances` | 20–100 |
 | `aws.eks.list_clusters` | 1–100 |
+| `aws.elasticache.describe_cache_clusters`, `aws.elasticache.describe_replication_groups` | 1–100 |
+| `aws.ecs.list_clusters`, `aws.ecs.list_services`, `aws.ecs.list_tasks` | 1–100 |
 | `aws.elb.describe_load_balancers`, `aws.elbv2.describe_load_balancers` | 1–400 |
 | `aws.s3.list_buckets` | 1–10000 |
 
@@ -15,7 +17,7 @@ The server's configured maximum page size also applies. Default page size is 100
 
 Exactly one account scope is required, as for existing AWS detail operations. Credentials must belong to that account (or assume its configured role). The adapter uses the profile account as normalized metadata; it does not perform STS identity verification on each request. Region allowlists and service filters still apply. Unknown params are rejected before contacting AWS.
 
-S3 lists general-purpose buckets only, using the requested regional endpoint and AWS BucketRegion filter. It does not read object bodies, keys, or directory buckets. EKS returns cluster names; use the existing describe_cluster operation for details. ELB lists load balancer metadata, not listeners or target health.
+S3 lists general-purpose buckets only, using the requested regional endpoint and AWS BucketRegion filter. It does not read object bodies, keys, or directory buckets. EKS returns cluster names; use the existing describe_cluster operation for details. ELB list operations return load balancer metadata; separate listener and target-health operations provide those details.
 
 Example:
 

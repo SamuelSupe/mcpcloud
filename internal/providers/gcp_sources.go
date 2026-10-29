@@ -228,6 +228,9 @@ type bigQueryResponse struct {
 }
 
 func (a *gcpAdapter) queryCosts(ctx context.Context, scope string, req provider.QueryRequest) (provider.Page, error) {
+	if !strings.HasPrefix(scope, "projects/") {
+		return provider.Page{}, &provider.Error{Code: "invalid_scope", Operation: gcpCostsOperation, Message: "GCP cost queries require a project scope"}
+	}
 	start, end, err := rangeRequired(req, gcpCostsOperation)
 	if err != nil {
 		return provider.Page{}, err

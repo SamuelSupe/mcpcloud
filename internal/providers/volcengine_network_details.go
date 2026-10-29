@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"time"
 
@@ -94,7 +93,7 @@ func volcengineNATListParameters() map[string]any {
 	}
 }
 
-func validateVolcengineNetworkRequest(req provider.NativeRequest) (string, int64, int64, error) {
+func validateVolcengineNetworkRequest(req provider.NativeRequest) (string, int64, int64, int, int64, error) {
 	key := "nat_gateway_id"
 	switch req.Operation {
 	case volcengineCLBDetailOperation, volcengineCLBListenersOperation:
@@ -111,7 +110,7 @@ func validateVolcengineNetworkRequest(req provider.NativeRequest) (string, int64
 		key = "project_name"
 	case volcengineNATDetailOperation, volcengineNATListSNATOperation, volcengineNATListDNATOperation:
 	default:
-		return "", 0, 0, &provider.Error{Code: "operation_not_allowed", Operation: req.Operation, Message: "operation is not registered"}
+		return "", 0, 0, 0, 0, &provider.Error{Code: "operation_not_allowed", Operation: req.Operation, Message: "operation is not registered"}
 	}
 	var selected provider.Operation
 	for _, op := range volcengineNetworkDetailOperations() {
@@ -121,43 +120,40 @@ func validateVolcengineNetworkRequest(req provider.NativeRequest) (string, int64
 		}
 	}
 	if err := selected.ValidateParams(req.Params); err != nil {
-		return "", 0, 0, &provider.Error{Code: "invalid_parameter", Operation: req.Operation, Message: err.Error()}
+		return "", 0, 0, 0, 0, &provider.Error{Code: "invalid_parameter", Operation: req.Operation, Message: err.Error()}
 	}
 	if req.Operation == volcengineNATListOperation {
 		networkType, e := nativeString(req.Params, "network_type")
 		if e != nil {
-			return "", 0, 0, e
+			return "", 0, 0, 0, 0, e
 		}
 		if networkType != "" && networkType != "internet" && networkType != "intranet" {
-			return "", 0, 0, &provider.Error{Code: "invalid_parameter", Operation: req.Operation, Message: "network_type must be internet or intranet"}
+			return "", 0, 0, 0, 0, &provider.Error{Code: "invalid_parameter", Operation: req.Operation, Message: "network_type must be internet or intranet"}
 		}
 	}
 	id, err := nativeIdentifier(req.Params, key)
 	if err != nil {
-		return "", 0, 0, deepParameterError(req.Operation, err)
+		return "", 0, 0, 0, 0, deepParameterError(req.Operation, err)
 	}
-	page := int64(1)
-	if req.PageToken != "" {
-		parsed, e := strconv.ParseInt(req.PageToken, 10, 64)
-		if e != nil || parsed < 2 || parsed > 1_000_000 {
-			return "", 0, 0, &provider.Error{Code: "invalid_cursor", Operation: req.Operation, Message: "provider cursor is invalid"}
+	paginated := req.Operation == volcengineCLBListenersOperation || req.Operation == volcengineCLBHealthOperation || req.Operation == volcengineNATListOperation || req.Operation == volcengineNATListSNATOperation || req.Operation == volcengineNATListDNATOperation
+	page, offset := int64(1), 0
+	if paginated {
+		page, offset, err = decodeVolcenginePageCursor(req.PageToken, req.Operation, id, req.Region)
+		if err != nil {
+			return "", 0, 0, 0, 0, err
 		}
-		page = parsed
+	} else if req.PageToken != "" {
+		return "", 0, 0, 0, 0, &provider.Error{Code: "invalid_cursor", Operation: req.Operation, Message: "detail operation does not paginate"}
 	}
-	if req.Operation == volcengineCLBDetailOperation || req.Operation == volcengineCLBServerGroupOperation || req.Operation == volcengineEIPDetailOperation || req.Operation == volcengineNATDetailOperation || req.Operation == volcengineTOSConfigurationOperation {
-		if req.PageToken != "" {
-			return "", 0, 0, &provider.Error{Code: "invalid_cursor", Operation: req.Operation, Message: "detail operation does not paginate"}
-		}
-	}
-	limit := int64(req.Limit)
+	limit := req.Limit
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	return id, page, limit, nil
+	return id, page, 100, offset, int64(limit), nil
 }
 
 func (a *volcengineAdapter) readNetworkDetail(ctx context.Context, req provider.NativeRequest) (provider.Page, error) {
-	id, page, size, err := validateVolcengineNetworkRequest(req)
+	id, page, size, offset, outputLimit, err := validateVolcengineNetworkRequest(req)
 	if err != nil {
 		return provider.Page{}, err
 	}
@@ -222,7 +218,7 @@ func (a *volcengineAdapter) readNetworkDetail(ctx context.Context, req provider.
 				rows = append(rows, a.volcengineCLBListenerRow(x, region, account))
 			}
 		}
-		return volcengineNetworkPage(rows, page, size, volc.Int64Value(o.TotalCount)), nil
+		return volcengineNetworkPage(rows, page, size, offset, outputLimit, volc.Int64Value(o.TotalCount), req)
 	case volcengineCLBHealthOperation:
 		o, e := newVolcengineCLBReadClient(sess).DescribeListenerHealthWithContext(ctx, &clb.DescribeListenerHealthInput{ListenerId: volc.String(id), PageNumber: &page, PageSize: &size})
 		if e != nil {
@@ -237,7 +233,7 @@ func (a *volcengineAdapter) readNetworkDetail(ctx context.Context, req provider.
 				rows = append(rows, a.volcengineCLBHealthRow(x, id, region, account))
 			}
 		}
-		return volcengineNetworkPage(rows, page, size, volc.Int64Value(o.TotalCount)), nil
+		return volcengineNetworkPage(rows, page, size, offset, outputLimit, volc.Int64Value(o.TotalCount), req)
 	case volcengineCLBServerGroupOperation:
 		o, e := newVolcengineCLBReadClient(sess).DescribeServerGroupAttributesWithContext(ctx, &clb.DescribeServerGroupAttributesInput{ServerGroupId: volc.String(id)})
 		if e != nil {
@@ -283,7 +279,7 @@ func (a *volcengineAdapter) readNetworkDetail(ctx context.Context, req provider.
 				rows = append(rows, a.volcengineNATListRow(x, region, account))
 			}
 		}
-		return volcengineNetworkPage(rows, page, size, volc.Int64Value(o.TotalCount)), nil
+		return volcengineNetworkPage(rows, page, size, offset, outputLimit, volc.Int64Value(o.TotalCount), req)
 	case volcengineNATListSNATOperation:
 		o, e := newVolcengineNATReadClient(sess).DescribeSnatEntriesWithContext(ctx, &natgateway.DescribeSnatEntriesInput{NatGatewayId: volc.String(id), PageNumber: &page, PageSize: &size})
 		if e != nil {
@@ -298,7 +294,7 @@ func (a *volcengineAdapter) readNetworkDetail(ctx context.Context, req provider.
 				rows = append(rows, a.volcengineSNATRow(x, region, account))
 			}
 		}
-		return volcengineNetworkPage(rows, page, size, volc.Int64Value(o.TotalCount)), nil
+		return volcengineNetworkPage(rows, page, size, offset, outputLimit, volc.Int64Value(o.TotalCount), req)
 	default:
 		o, e := newVolcengineNATReadClient(sess).DescribeDnatEntriesWithContext(ctx, &natgateway.DescribeDnatEntriesInput{NatGatewayId: volc.String(id), PageNumber: &page, PageSize: &size})
 		if e != nil {
@@ -313,16 +309,42 @@ func (a *volcengineAdapter) readNetworkDetail(ctx context.Context, req provider.
 				rows = append(rows, a.volcengineDNATRow(x, region, account))
 			}
 		}
-		return volcengineNetworkPage(rows, page, size, volc.Int64Value(o.TotalCount)), nil
+		return volcengineNetworkPage(rows, page, size, offset, outputLimit, volc.Int64Value(o.TotalCount), req)
 	}
 }
 
-func volcengineNetworkPage(rows []map[string]any, page, size, total int64) provider.Page {
-	next := ""
-	if page*size < total {
-		next = strconv.FormatInt(page+1, 10)
+func volcengineNetworkPage(rows []map[string]any, page, size int64, offset int, outputLimit, total int64, req provider.NativeRequest) (provider.Page, error) {
+	if offset >= len(rows) && offset != 0 {
+		return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: req.Operation, Message: "Volcengine cursor offset is outside the provider page"}
 	}
-	return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}
+	providerCount := len(rows)
+	end := min(offset+int(outputLimit), providerCount)
+	rows = rows[offset:end]
+	next := ""
+	if end < providerCount {
+		next = encodeVolcenginePageCursor(volcenginePageCursor{Operation: req.Operation, ID: stringValue(req.Params["nat_gateway_id"]), Region: req.Region, Page: page, Offset: end})
+		if req.Operation == volcengineCLBListenersOperation {
+			nextCursor := volcenginePageCursor{Operation: req.Operation, ID: stringValue(req.Params["load_balancer_id"]), Region: req.Region, Page: page, Offset: end}
+			next = encodeVolcenginePageCursor(nextCursor)
+		} else if req.Operation == volcengineCLBHealthOperation {
+			nextCursor := volcenginePageCursor{Operation: req.Operation, ID: stringValue(req.Params["listener_id"]), Region: req.Region, Page: page, Offset: end}
+			next = encodeVolcenginePageCursor(nextCursor)
+		} else if req.Operation == volcengineNATListOperation {
+			nextCursor := volcenginePageCursor{Operation: req.Operation, ID: stringValue(req.Params["project_name"]), Region: req.Region, Page: page, Offset: end}
+			next = encodeVolcenginePageCursor(nextCursor)
+		}
+	} else if page*size < total {
+		id := stringValue(req.Params["nat_gateway_id"])
+		if req.Operation == volcengineCLBListenersOperation {
+			id = stringValue(req.Params["load_balancer_id"])
+		} else if req.Operation == volcengineCLBHealthOperation {
+			id = stringValue(req.Params["listener_id"])
+		} else if req.Operation == volcengineNATListOperation {
+			id = stringValue(req.Params["project_name"])
+		}
+		next = encodeVolcenginePageCursor(volcenginePageCursor{Operation: req.Operation, ID: id, Region: req.Region, Page: page + 1})
+	}
+	return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}, nil
 }
 
 func deepInvalidResponse(operation string) error {

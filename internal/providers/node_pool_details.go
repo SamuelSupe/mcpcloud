@@ -76,6 +76,10 @@ func (a *azureAdapter) readNodePools(ctx context.Context, req provider.NativeReq
 	if err != nil {
 		return provider.Page{}, err
 	}
+	region, err := a.managedClusterRegion(ctx, token, sub, rg, cluster, req.Region, spec.operation)
+	if err != nil {
+		return provider.Page{}, err
+	}
 	endpoint := "https://management.azure.com/subscriptions/" + url.PathEscape(sub) + "/resourceGroups/" + url.PathEscape(rg) + "/providers/Microsoft.ContainerService/managedClusters/" + url.PathEscape(cluster) + "/agentPools?api-version=2025-10-01"
 	var detail poolListResponse
 	if err = azureDetailGET(ctx, endpoint, token, spec.operation, &detail); err != nil {
@@ -99,8 +103,8 @@ func (a *azureAdapter) readNodePools(ctx context.Context, req provider.NativeReq
 		pools = append(pools, more.Value...)
 		detail = more
 	}
-	page := poolRows(a.Provider(), a.name, sub, req.Region, cluster, pools)
-	page.Requests = requests
+	page := poolRows(a.Provider(), a.name, sub, region, cluster, pools)
+	page.Requests = requests + 1
 	return page, nil
 }
 

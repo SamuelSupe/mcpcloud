@@ -20,9 +20,6 @@ func huaweiCESOperations() []provider.Operation {
 }
 
 func (a *huaweiAdapter) listHuaweiCESMetrics(ctx context.Context, r provider.NativeRequest) (provider.Page, error) {
-	if r.PageToken != "" {
-		return provider.Page{}, &provider.Error{Code: "cursor_not_supported", Operation: r.Operation, Message: "CES metric discovery does not expose provider cursors"}
-	}
 	namespace, err := nativeString(r.Params, "namespace")
 	if err != nil || namespace == "" {
 		return provider.Page{}, &provider.Error{Code: "invalid_parameter", Operation: r.Operation, Message: "CES metric discovery requires namespace"}
@@ -51,11 +48,18 @@ func (a *huaweiAdapter) listHuaweiCESMetrics(ctx context.Context, r provider.Nat
 	if err != nil {
 		return provider.Page{}, &provider.Error{Code: "authentication_error", Operation: r.Operation, Message: "CES client could not be built"}
 	}
-	limit := int32(1000)
-	request := &cesmodel.ListMetricsRequest{Namespace: &namespace, MetricName: optionalString(metricName), Limit: &limit}
+	limit := nativeHuaweiListLimit(int(r.Limit), 1000)
+	request := &cesmodel.ListMetricsRequest{Namespace: &namespace, MetricName: optionalString(metricName), Start: optionalString(r.PageToken), Limit: &limit}
 	response, err := ces.NewCesClient(hc).ListMetrics(request)
 	if err != nil {
 		return provider.Page{}, huaweiSourceError(r.Operation, err)
+	}
+	metricCount := 0
+	if response.Metrics != nil {
+		metricCount = len(*response.Metrics)
+	}
+	if response.MetaData == nil || response.MetaData.Count < 0 || response.MetaData.Count != int32(metricCount) || response.MetaData.Count > limit || response.MetaData.Total < response.MetaData.Count || (response.MetaData.Total > response.MetaData.Count && (response.MetaData.Marker == "" || response.MetaData.Count == 0)) || (response.MetaData.Marker != "" && response.MetaData.Marker == r.PageToken) {
+		return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: r.Operation, Message: "CES returned invalid metric pagination metadata"}
 	}
 	rows := []map[string]any{}
 	if response.Metrics != nil {
@@ -74,7 +78,11 @@ func (a *huaweiAdapter) listHuaweiCESMetrics(ctx context.Context, r provider.Nat
 			rows = append(rows, row)
 		}
 	}
-	return provider.Page{Rows: rows, Scanned: len(rows), Requests: 1}, nil
+	next := ""
+	if response.MetaData.Total > response.MetaData.Count {
+		next = response.MetaData.Marker
+	}
+	return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}, nil
 }
 
 func optionalString(value string) *string {

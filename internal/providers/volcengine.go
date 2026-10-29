@@ -2,6 +2,9 @@ package providers
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +24,64 @@ const (
 	volcengineMetricsOperation   = "volcengine.cloudmonitor.get_metric_data"
 	volcengineCostsOperation     = "volcengine.billing.list_bill_detail"
 )
+
+const volcengineSearchPageSize = 100
+
+type volcengineSearchCursor struct {
+	Token  string `json:"t,omitempty"`
+	Offset int    `json:"o,omitempty"`
+}
+
+type volcenginePageCursor struct {
+	Operation string `json:"op"`
+	ID        string `json:"id"`
+	Region    string `json:"r"`
+	Page      int64  `json:"p"`
+	Offset    int    `json:"o,omitempty"`
+}
+
+func encodeVolcenginePageCursor(cursor volcenginePageCursor) string {
+	data, _ := json.Marshal(cursor)
+	return "p1." + base64.RawURLEncoding.EncodeToString(data)
+}
+
+func decodeVolcenginePageCursor(token, operation, id, region string) (int64, int, error) {
+	if token == "" {
+		return 1, 0, nil
+	}
+	bad := func() (int64, int, error) {
+		return 0, 0, &provider.Error{Code: "invalid_cursor", Operation: operation, Message: "invalid or changed Volcengine pagination cursor"}
+	}
+	if !strings.HasPrefix(token, "p1.") {
+		return bad()
+	}
+	data, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(token, "p1."))
+	var cursor volcenginePageCursor
+	if err != nil || len(data) > 4096 || json.Unmarshal(data, &cursor) != nil || cursor.Operation != operation || cursor.ID != id || cursor.Region != region || cursor.Page < 1 || cursor.Page > 1_000_000 || cursor.Offset < 0 || cursor.Offset >= volcengineSearchPageSize {
+		return bad()
+	}
+	return cursor.Page, cursor.Offset, nil
+}
+
+func encodeVolcengineSearchCursor(cursor volcengineSearchCursor) string {
+	data, _ := json.Marshal(cursor)
+	return "v1." + base64.RawURLEncoding.EncodeToString(data)
+}
+
+func decodeVolcengineSearchCursor(token string) (volcengineSearchCursor, error) {
+	if token == "" {
+		return volcengineSearchCursor{}, nil
+	}
+	if !strings.HasPrefix(token, "v1.") {
+		return volcengineSearchCursor{}, fmt.Errorf("unsupported legacy Resource Center cursor")
+	}
+	data, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(token, "v1."))
+	var cursor volcengineSearchCursor
+	if err != nil || len(data) > 4096 || json.Unmarshal(data, &cursor) != nil || cursor.Offset < 0 || cursor.Offset >= volcengineSearchPageSize {
+		return volcengineSearchCursor{}, fmt.Errorf("invalid Resource Center cursor")
+	}
+	return cursor, nil
+}
 
 type volcengineAdapter struct {
 	name    string
@@ -168,13 +229,17 @@ func (a *volcengineAdapter) search(ctx context.Context, filters map[string][]str
 		return provider.Page{}, err
 	}
 	client := resourcecenter.New(sess)
-	if limit <= 0 || limit > 100 {
-		limit = 100
+	cursor, err := decodeVolcengineSearchCursor(pageToken)
+	if err != nil {
+		return provider.Page{}, &provider.Error{Code: "invalid_cursor", Operation: volcengineResourcesOperation, Message: err.Error()}
 	}
-	max := int32(limit)
+	if limit <= 0 || limit > volcengineSearchPageSize {
+		limit = volcengineSearchPageSize
+	}
+	max := int32(volcengineSearchPageSize)
 	input := &resourcecenter.SearchResourcesInput{MaxResults: &max}
-	if pageToken != "" {
-		input.NextToken = &pageToken
+	if cursor.Token != "" {
+		input.NextToken = &cursor.Token
 	}
 	for key, values := range filters {
 		k, m := key, "Equals"
@@ -189,17 +254,28 @@ func (a *volcengineAdapter) search(ctx context.Context, filters map[string][]str
 	if err != nil {
 		return provider.Page{}, &provider.Error{Code: "volcengine_api_error", Operation: volcengineResourcesOperation, Message: err.Error(), Retryable: containsAny(strings.ToLower(err.Error()), "throttl", "timeout")}
 	}
-	rows := make([]map[string]any, 0, len(output.Resources))
+	providerRows := make([]map[string]any, 0, len(output.Resources))
 	now := time.Now().UTC()
 	for _, resource := range output.Resources {
 		if resource == nil {
 			continue
 		}
-		rows = append(rows, a.row(resource, now))
+		providerRows = append(providerRows, a.row(resource, now))
 	}
+	if cursor.Offset >= len(providerRows) && cursor.Offset != 0 {
+		return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: volcengineResourcesOperation, Message: "Resource Center cursor offset is outside the provider page"}
+	}
+	end := min(cursor.Offset+limit, len(providerRows))
+	rows := providerRows[cursor.Offset:end]
 	next := ""
-	if output.NextToken != nil {
-		next = *output.NextToken
+	providerNext := deref(output.NextToken)
+	if end < len(providerRows) {
+		next = encodeVolcengineSearchCursor(volcengineSearchCursor{Token: cursor.Token, Offset: end})
+	} else if providerNext != "" {
+		if providerNext == cursor.Token {
+			return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: volcengineResourcesOperation, Message: "Resource Center returned a repeated pagination cursor"}
+		}
+		next = encodeVolcengineSearchCursor(volcengineSearchCursor{Token: providerNext})
 	}
 	return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}, nil
 }

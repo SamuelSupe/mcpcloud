@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"time"
 
@@ -34,7 +33,7 @@ func isVolcengineVKEInventoryOperation(name string) bool {
 	return name == volcengineVKEListNodePoolsOperation || name == volcengineVKEListNodesOperation
 }
 
-func validateVolcengineVKEInventoryRequest(request provider.NativeRequest) (string, int32, int32, error) {
+func validateVolcengineVKEInventoryRequest(request provider.NativeRequest) (string, int32, int32, int, int32, error) {
 	var operation provider.Operation
 	for _, candidate := range volcengineVKEInventoryOperations() {
 		if candidate.Name == request.Operation {
@@ -43,32 +42,28 @@ func validateVolcengineVKEInventoryRequest(request provider.NativeRequest) (stri
 		}
 	}
 	if operation.Name == "" {
-		return "", 0, 0, &provider.Error{Code: "operation_not_allowed", Operation: request.Operation, Message: "operation is not registered"}
+		return "", 0, 0, 0, 0, &provider.Error{Code: "operation_not_allowed", Operation: request.Operation, Message: "operation is not registered"}
 	}
 	if err := operation.ValidateParams(request.Params); err != nil {
-		return "", 0, 0, &provider.Error{Code: "invalid_parameter", Operation: request.Operation, Message: err.Error()}
+		return "", 0, 0, 0, 0, &provider.Error{Code: "invalid_parameter", Operation: request.Operation, Message: err.Error()}
 	}
 	clusterID, err := nativeIdentifier(request.Params, "cluster_id")
 	if err != nil {
-		return "", 0, 0, deepParameterError(request.Operation, err)
+		return "", 0, 0, 0, 0, deepParameterError(request.Operation, err)
 	}
-	pageNumber := int32(1)
-	if request.PageToken != "" {
-		parsed, err := strconv.ParseInt(request.PageToken, 10, 32)
-		if err != nil || parsed < 2 || parsed > 1_000_000 {
-			return "", 0, 0, &provider.Error{Code: "invalid_cursor", Operation: request.Operation, Message: "VKE page cursor is invalid"}
-		}
-		pageNumber = int32(parsed)
+	page, offset, err := decodeVolcenginePageCursor(request.PageToken, request.Operation, clusterID, request.Region)
+	if err != nil {
+		return "", 0, 0, 0, 0, err
 	}
 	limit := request.Limit
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	return clusterID, pageNumber, int32(limit), nil
+	return clusterID, int32(page), 100, offset, int32(limit), nil
 }
 
 func (a *volcengineAdapter) readVKEInventory(ctx context.Context, request provider.NativeRequest) (provider.Page, error) {
-	clusterID, pageNumber, pageSize, err := validateVolcengineVKEInventoryRequest(request)
+	clusterID, pageNumber, pageSize, offset, outputLimit, err := validateVolcengineVKEInventoryRequest(request)
 	if err != nil {
 		return provider.Page{}, err
 	}
@@ -101,7 +96,7 @@ func (a *volcengineAdapter) readVKEInventory(ctx context.Context, request provid
 				rows = append(rows, a.volcengineVKENodePoolRow(item, region, account))
 			}
 		}
-		return volcengineVKEListPage(rows, pageNumber, pageSize, volc.Int32Value(output.TotalCount)), nil
+		return volcengineVKEListPage(rows, pageNumber, pageSize, offset, outputLimit, volc.Int32Value(output.TotalCount), request)
 	}
 	output, err := client.ListNodesWithContext(ctx, &vke.ListNodesInput{
 		Filter: &vke.FilterForListNodesInput{ClusterIds: []*string{volc.String(clusterID)}}, PageNumber: &pageNumber, PageSize: &pageSize,
@@ -118,15 +113,23 @@ func (a *volcengineAdapter) readVKEInventory(ctx context.Context, request provid
 			rows = append(rows, a.volcengineVKENodeRow(item, region, account))
 		}
 	}
-	return volcengineVKEListPage(rows, pageNumber, pageSize, volc.Int32Value(output.TotalCount)), nil
+	return volcengineVKEListPage(rows, pageNumber, pageSize, offset, outputLimit, volc.Int32Value(output.TotalCount), request)
 }
 
-func volcengineVKEListPage(rows []map[string]any, pageNumber, pageSize, total int32) provider.Page {
-	next := ""
-	if pageNumber*pageSize < total {
-		next = strconv.FormatInt(int64(pageNumber+1), 10)
+func volcengineVKEListPage(rows []map[string]any, pageNumber, pageSize int32, offset int, outputLimit, total int32, request provider.NativeRequest) (provider.Page, error) {
+	if offset >= len(rows) && offset != 0 {
+		return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: request.Operation, Message: "VKE cursor offset is outside the provider page"}
 	}
-	return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}
+	providerCount := len(rows)
+	end := min(offset+int(outputLimit), len(rows))
+	rows = rows[offset:end]
+	next := ""
+	if end < providerCount {
+		next = encodeVolcenginePageCursor(volcenginePageCursor{Operation: request.Operation, ID: stringValue(request.Params["cluster_id"]), Region: request.Region, Page: int64(pageNumber), Offset: end})
+	} else if int64(pageNumber)*int64(pageSize) < int64(total) {
+		next = encodeVolcenginePageCursor(volcenginePageCursor{Operation: request.Operation, ID: stringValue(request.Params["cluster_id"]), Region: request.Region, Page: int64(pageNumber + 1)})
+	}
+	return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}, nil
 }
 
 func (a *volcengineAdapter) volcengineVKENodePoolRow(detail *vke.ItemForListNodePoolsOutput, region, account string) map[string]any {

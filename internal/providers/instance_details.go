@@ -131,6 +131,34 @@ func exactDetailRegion(requested string, configured []string, operation string) 
 	return "", &provider.Error{Code: "missing_region", Operation: operation, Message: "an exact region is required when the profile does not configure exactly one region"}
 }
 
+func verifyDetailRegion(actual, requested string, configured []string, operation string) (string, error) {
+	actual = strings.ToLower(strings.TrimSpace(actual))
+	if actual == "" || !cloudRegionPattern.MatchString(actual) {
+		return "", &provider.Error{Code: "invalid_provider_response", Operation: operation, Message: "resource location is missing or invalid"}
+	}
+	if requested != "" && requested != "*" {
+		if !cloudRegionPattern.MatchString(requested) {
+			return "", &provider.Error{Code: "invalid_region", Operation: operation, Message: "an exact valid region is required"}
+		}
+		if !strings.EqualFold(actual, requested) {
+			return "", &provider.Error{Code: "scope_not_allowed", Operation: operation, Message: "resource location does not match the requested region"}
+		}
+	}
+	if len(configured) > 0 {
+		allowed := false
+		for _, region := range configured {
+			if region == "*" || strings.EqualFold(actual, region) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return "", &provider.Error{Code: "scope_not_allowed", Operation: operation, Message: "resource location is outside the profile allowlist"}
+		}
+	}
+	return actual, nil
+}
+
 func exactDetailScope(configured []string, requested, operation, label string) (string, error) {
 	if strings.TrimSpace(requested) == "" {
 		return "", &provider.Error{Code: "missing_parameter", Operation: operation, Message: fmt.Sprintf("parameter %s is required", label)}

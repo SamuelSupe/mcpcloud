@@ -1,6 +1,6 @@
 # 发布平台与架构
 
-核对日期：2026-10-20。本文件只说明 MCPCloud 的平台选择，不表示它与 DataKit 或观测云平台使用同一发行流程。
+核对日期：2026-10-29。本文件只说明 MCPCloud 的平台选择，不表示它与 DataKit 或观测云平台使用同一发行流程。
 
 ## 本次程序包
 
@@ -11,7 +11,7 @@
 | Linux amd64 | x86_64 | TAR.GZ，Ubuntu 24.04 x86_64 虚拟机启动验证 |
 | Linux arm64 | aarch64 | TAR.GZ，Ubuntu 24.04 ARM64 虚拟机启动验证 |
 
-v0.1.1 覆盖上述四种 64 位平台，386、ARMv7、macOS 暂未提供。amd64 同时适用于 Intel 和 AMD，不是 AMD 专用版。四种包使用 GitHub 托管的匹配架构虚拟机，不使用 QEMU；不声明覆盖所有服务器型号和系统版本。v0.1.0 的 Windows 本机、Linux WSL / QEMU 历史验证结果仍按原口径保留。
+v0.1.2 覆盖上述四种 64 位平台，386、ARMv7、macOS 暂未提供。amd64 同时适用于 Intel 和 AMD，不是 AMD 专用版。四种包使用 GitHub 托管的匹配架构虚拟机，不使用 QEMU；不声明覆盖所有服务器型号和系统版本。v0.1.0 的 Windows 本机、Linux WSL / QEMU 历史验证结果仍按原口径保留。
 
 [GitHub 标准运行器](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)提供 `windows-2025`、`windows-11-arm`、`ubuntu-24.04`、`ubuntu-24.04-arm`。公开仓库使用标准运行器免费。本工作流只用这些运行器，不启用 larger runner 或注入云凭证。
 

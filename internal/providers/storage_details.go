@@ -63,6 +63,15 @@ func (a *azureAdapter) readStorageDetail(ctx context.Context, req provider.Nativ
 	if err != nil {
 		return provider.Page{}, err
 	}
+	accountEndpoint := "https://management.azure.com/subscriptions/" + url.PathEscape(sub) + "/resourceGroups/" + values["resource_group"] + "/providers/Microsoft.Storage/storageAccounts/" + values["account"] + "?api-version=2023-05-01"
+	var accountDetail map[string]any
+	if err = azureDetailGET(ctx, accountEndpoint, token, spec.operation, &accountDetail); err != nil {
+		return provider.Page{}, err
+	}
+	region, err := verifyAzureResourceRegion(stringValue(accountDetail["location"]), req.Region, a.profile.Regions, spec.operation)
+	if err != nil {
+		return provider.Page{}, err
+	}
 	endpoint := "https://management.azure.com/subscriptions/" + url.PathEscape(sub) + "/resourceGroups/" + values["resource_group"] + "/providers/Microsoft.Storage/storageAccounts/" + values["account"] + "/blobServices/default/containers/" + values["container"] + "?api-version=2023-05-01"
 	detail := map[string]any{}
 	if err = azureDetailGET(ctx, endpoint, token, spec.operation, &detail); err != nil {
@@ -71,7 +80,9 @@ func (a *azureAdapter) readStorageDetail(ctx context.Context, req provider.Nativ
 	if stringValue(detail["id"]) == "" {
 		return provider.Page{}, deepNotFound(spec.operation, spec.kind)
 	}
-	return storageRow(a.Provider(), a.name, sub, req.Region, stringValue(detail["id"]), stringValue(detail["name"]), "container", detail), nil
+	page := storageRow(a.Provider(), a.name, sub, region, stringValue(detail["id"]), stringValue(detail["name"]), "container", detail)
+	page.Requests = 2
+	return page, nil
 }
 
 func (a *gcpAdapter) readStorageDetail(ctx context.Context, req provider.NativeRequest, spec deepDetailSpec) (provider.Page, error) {

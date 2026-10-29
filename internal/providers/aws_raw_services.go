@@ -62,6 +62,42 @@ func encodeRawCacheCursor(cursor rawCacheCursor) string {
 	return base64.RawURLEncoding.EncodeToString(raw)
 }
 
+type rawECSCursor struct {
+	Token  string `json:"t,omitempty"`
+	Offset int    `json:"o,omitempty"`
+}
+
+func encodeRawECSCursor(cursor rawECSCursor) string {
+	raw, _ := json.Marshal(cursor)
+	return "v1." + base64.RawURLEncoding.EncodeToString(raw)
+}
+
+func decodeRawECSCursor(token, operation string) (rawECSCursor, error) {
+	if token == "" {
+		return rawECSCursor{}, nil
+	}
+	bad := func() (rawECSCursor, error) {
+		return rawECSCursor{}, &provider.Error{Code: "invalid_cursor", Operation: operation, Message: "invalid ECS cursor"}
+	}
+	if !strings.HasPrefix(token, "v1.") {
+		return bad()
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(token, "v1."))
+	var cursor rawECSCursor
+	if err != nil || len(raw) > 4096 || json.Unmarshal(raw, &cursor) != nil || cursor.Offset < 0 {
+		return bad()
+	}
+	return cursor, nil
+}
+
+func awsRegionalEndpoint(region, service string) string {
+	suffix := "amazonaws.com"
+	if strings.HasPrefix(region, "cn-") {
+		suffix = "amazonaws.com.cn"
+	}
+	return "https://" + service + "." + region + "." + suffix + "/"
+}
+
 func (a *awsAdapter) fetchAWSRawService(ctx context.Context, cfg awsbase.Config, req provider.NativeRequest, region, account string, limit int32) (provider.Page, error) {
 	if strings.HasPrefix(req.Operation, "aws.elasticache.") {
 		return a.rawElastiCache(ctx, cfg, req, region, account, limit)
@@ -103,12 +139,12 @@ func (a *awsAdapter) rawElastiCache(ctx context.Context, cfg awsbase.Config, req
 	// ElastiCache requires MaxRecords >= 20. Re-read a provider page with an
 	// offset cursor when MCP clients request a smaller page so the MCP limit is
 	// still honored.
-	providerLimit := max(limit, 20)
+	const providerLimit = 100
 	q := url.Values{"Action": {action}, "Version": {"2015-02-02"}, "MaxRecords": {strconv.Itoa(int(providerLimit))}}
 	if cursor.Marker != "" {
 		q.Set("Marker", cursor.Marker)
 	}
-	endpoint := "https://elasticache." + region + ".amazonaws.com.cn/?" + q.Encode()
+	endpoint := strings.TrimSuffix(awsRegionalEndpoint(region, "elasticache"), "/") + "/?" + q.Encode()
 	empty := sha256.Sum256(nil)
 	resp, err := rawSigned(ctx, cfg, "elasticache", http.MethodGet, endpoint, nil, hex.EncodeToString(empty[:]), nil)
 	if err != nil {
@@ -162,9 +198,14 @@ func (a *awsAdapter) rawElastiCache(ctx context.Context, cfg awsbase.Config, req
 
 func (a *awsAdapter) rawECS(ctx context.Context, cfg awsbase.Config, req provider.NativeRequest, region, account string, limit int32) (provider.Page, error) {
 	action := map[string]string{"aws.ecs.list_clusters": "ListClusters", "aws.ecs.list_services": "ListServices", "aws.ecs.list_tasks": "ListTasks"}[req.Operation]
-	payload := map[string]any{"maxResults": limit}
-	if req.PageToken != "" {
-		payload["nextToken"] = req.PageToken
+	cursor, err := decodeRawECSCursor(req.PageToken, req.Operation)
+	if err != nil {
+		return provider.Page{}, err
+	}
+	const providerLimit = 100
+	payload := map[string]any{"maxResults": providerLimit}
+	if cursor.Token != "" {
+		payload["nextToken"] = cursor.Token
 	}
 	if req.Operation != "aws.ecs.list_clusters" {
 		cluster, e := awsDirectIdentifier(req, "cluster_arn")
@@ -175,7 +216,7 @@ func (a *awsAdapter) rawECS(ctx context.Context, cfg awsbase.Config, req provide
 	}
 	b, _ := json.Marshal(payload)
 	sum := sha256.Sum256(b)
-	endpoint := "https://ecs." + region + ".amazonaws.com.cn/"
+	endpoint := awsRegionalEndpoint(region, "ecs")
 	resp, err := rawSigned(ctx, cfg, "ecs", http.MethodPost, endpoint, strings.NewReader(string(b)), hex.EncodeToString(sum[:]), map[string]string{"Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AmazonEC2ContainerServiceV20141113." + action})
 	if err != nil {
 		return provider.Page{}, attributeInstanceDetailError(classifyAWSError(err), req.Operation)
@@ -201,12 +242,25 @@ func (a *awsAdapter) rawECS(ctx context.Context, cfg awsbase.Config, req provide
 		values = out.TaskArns
 		kind = "task"
 	}
-	page := provider.Page{Rows: []map[string]any{}, NextToken: out.NextToken, Requests: 1}
+	providerRows := []map[string]any{}
 	for _, id := range values {
-		page.Rows = append(page.Rows, newDeepDetailRow(a.Provider(), a.name, id, lastName(id), "ecs", "AWS::ECS::"+ecsResourceKind(kind), "compute", kind, region, account))
+		providerRows = append(providerRows, newDeepDetailRow(a.Provider(), a.name, id, lastName(id), "ecs", "AWS::ECS::"+ecsResourceKind(kind), "compute", kind, region, account))
 	}
-	page.Scanned = len(page.Rows)
-	return page, nil
+	if cursor.Offset >= len(providerRows) && cursor.Offset != 0 {
+		return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: req.Operation, Message: "ECS cursor offset is outside the provider page"}
+	}
+	end := min(cursor.Offset+int(limit), len(providerRows))
+	rows := providerRows[cursor.Offset:end]
+	next := ""
+	if end < len(providerRows) {
+		next = encodeRawECSCursor(rawECSCursor{Token: cursor.Token, Offset: end})
+	} else if out.NextToken != "" {
+		if out.NextToken == cursor.Token {
+			return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: req.Operation, Message: "ECS returned a repeated pagination cursor"}
+		}
+		next = encodeRawECSCursor(rawECSCursor{Token: out.NextToken})
+	}
+	return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}, nil
 }
 
 func ecsResourceKind(kind string) string {

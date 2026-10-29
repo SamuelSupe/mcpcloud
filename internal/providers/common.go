@@ -129,6 +129,7 @@ type periodCursor struct {
 	Period string `json:"p"`
 	Offset int    `json:"o,omitempty"`
 	Page   int    `json:"n,omitempty"`
+	Total  int    `json:"t,omitempty"`
 }
 
 func encodePeriodCursor(cursor periodCursor) string {
@@ -145,7 +146,7 @@ func decodePeriodCursor(token string) (periodCursor, error) {
 		return periodCursor{}, fmt.Errorf("invalid provider cursor")
 	}
 	var cursor periodCursor
-	if err := json.Unmarshal(data, &cursor); err != nil || cursor.Offset < 0 || cursor.Page < 0 {
+	if err := json.Unmarshal(data, &cursor); err != nil || cursor.Offset < 0 || cursor.Page < 0 || cursor.Total < 0 {
 		return periodCursor{}, fmt.Errorf("invalid provider cursor")
 	}
 	return cursor, nil

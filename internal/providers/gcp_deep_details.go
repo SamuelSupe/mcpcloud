@@ -195,10 +195,7 @@ func (a *gcpAdapter) gcpGKEDetailRow(detail gcpGKEDetailResponse, project, locat
 	region := location
 	zone := detail.Zone
 	if zone != "" {
-		region = zone
-		if index := strings.LastIndex(zone, "-"); index > 0 {
-			region = zone[:index]
-		}
+		region = gcpRegionForLocation(zone)
 	}
 	row := newDeepDetailRow(a.Provider(), a.name, id, detail.Name, "container", "container.googleapis.com/Cluster", "kubernetes", "cluster", region, project)
 	row["zone"] = zone

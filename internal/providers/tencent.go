@@ -292,15 +292,23 @@ func (a *tencentAdapter) search(ctx context.Context, view string, filters map[st
 		attrs["pay_mode"] = resource.PayMode
 		attrs["private_ip_addresses"] = resource.PrivateIP
 		attrs["public_ip_addresses"] = resource.PublicIP
-		if parsed, err := time.Parse("2006-01-02 15:04:05", resource.CreateTime); err == nil {
+		if parsed, err := time.ParseInLocation("2006-01-02 15:04:05", resource.CreateTime, tencentBillingLocation()); err == nil {
 			row["created_at"] = parsed.UTC().Format(time.RFC3339Nano)
 		}
-		if parsed, err := time.Parse("2006-01-02 15:04:05", resource.ExpireTime); err == nil {
+		if parsed, err := time.ParseInLocation("2006-01-02 15:04:05", resource.ExpireTime, tencentBillingLocation()); err == nil {
 			attrs["expires_at"] = parsed.UTC().Format(time.RFC3339Nano)
 		}
 		rows = append(rows, row)
 	}
 	return provider.Page{Rows: rows, NextToken: envelope.Response.NextToken, Scanned: len(rows), Requests: 1}, nil
+}
+
+func tencentBillingLocation() *time.Location {
+	return time.FixedZone("Asia/Shanghai", 8*60*60)
+}
+
+func tencentBillingTime(value time.Time) string {
+	return value.In(tencentBillingLocation()).Format("2006-01-02 15:04:05")
 }
 
 func tencentService(resourceType string) string {

@@ -78,6 +78,9 @@ func (a *gcpAdapter) Capabilities() []provider.Capability {
 		if c[i].Source == model.SourceCosts && a.profile.Options["billing_table"] == "" {
 			c[i].Status = "not_configured"
 			c[i].Notes = "requires options.billing_table pointing to a preconfigured standard Billing Export table"
+		} else if c[i].Source == model.SourceCosts && !a.hasMonitoringProject() {
+			c[i].Status = "not_configured"
+			c[i].Notes = "requires scopes.projects or a project-level options.asset_scope to filter Billing Export rows"
 		}
 	}
 	return c
@@ -124,7 +127,7 @@ func (a *gcpAdapter) Query(ctx context.Context, req provider.QueryRequest) (prov
 		}
 		return a.queryMetrics(ctx, scope, req)
 	case model.SourceCosts:
-		if len(req.Accounts) > 0 && !strings.HasPrefix(scope, "projects/") {
+		if !strings.HasPrefix(scope, "projects/") {
 			return provider.Page{}, &provider.Error{Code: "invalid_scope", Operation: gcpCostsOperation, Message: "GCP cost account scopes must identify projects"}
 		}
 		return a.queryCosts(ctx, scope, req)
@@ -322,6 +325,7 @@ func (a *gcpAdapter) searchResources(ctx context.Context, scope, region, pageTok
 		scopeMap := row["scope"].(map[string]any)
 		scopeMap["project_id"] = project
 		scopeMap["organization_id"] = strings.TrimPrefix(resource.Organization, "organizations/")
+		scopeMap["folder_ids"] = resource.Folders
 		if parsed, err := time.Parse(time.RFC3339, resource.CreateTime); err == nil {
 			row["created_at"] = parsed.UTC().Format(time.RFC3339Nano)
 		}
@@ -361,6 +365,7 @@ func (a *gcpAdapter) searchIAM(ctx context.Context, scope, pageToken string, lim
 				scopeMap := row["scope"].(map[string]any)
 				scopeMap["project_id"] = project
 				scopeMap["organization_id"] = strings.TrimPrefix(result.Organization, "organizations/")
+				scopeMap["folder_ids"] = result.Folders
 				native := row["native"].(map[string]any)
 				native["asset_type"] = result.AssetType
 				native["folders"] = result.Folders

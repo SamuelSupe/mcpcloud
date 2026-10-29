@@ -66,7 +66,7 @@ func (a *tencentAdapter) queryPartnerCosts(ctx context.Context, req provider.Que
 	}
 	request := tchttp.NewCommonRequest("intlpartnersmgt", "2022-09-28", "DescribeCustomerOwnCostExplorerSummary")
 	request.SetContext(ctx)
-	err = request.SetActionParameters(map[string]any{"StartTime": start.Format("2006-01-02 15:04:05"), "EndTime": end.Add(-time.Second).Format("2006-01-02 15:04:05"), "Dimension": "Business", "FeeType": "totalCost", "BillType": 1, "PeriodType": "day", "Page": scope.Page, "PageSize": scope.Limit})
+	err = request.SetActionParameters(map[string]any{"StartTime": tencentBillingTime(start), "EndTime": tencentBillingTime(end.Add(-time.Second)), "Dimension": "Business", "FeeType": "totalCost", "BillType": 1, "PeriodType": "day", "Page": scope.Page, "PageSize": scope.Limit})
 	if err != nil {
 		return provider.Page{}, err
 	}
@@ -79,8 +79,8 @@ func (a *tencentAdapter) queryPartnerCosts(ctx context.Context, req provider.Que
 
 func partnerDailyBounds(start, end time.Time) (time.Time, time.Time) {
 	ceilDay := func(value time.Time) time.Time {
-		value = value.UTC()
-		day := time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
+		value = value.In(tencentBillingLocation())
+		day := time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, tencentBillingLocation())
 		if day.Before(value) {
 			day = day.AddDate(0, 0, 1)
 		}

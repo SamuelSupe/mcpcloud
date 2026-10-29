@@ -40,6 +40,8 @@ type ExplainResult struct {
 	CapabilityErrors []string              `json:"capability_errors,omitempty"`
 }
 
+const maxFilterErrors = 100
+
 type Target struct {
 	Profile  string         `json:"profile"`
 	Provider model.Provider `json:"provider"`
@@ -248,6 +250,8 @@ func (e *Engine) Query(ctx context.Context, query dsl.Query, pageSize int) (mode
 		errorsOut = append(errorsOut, model.QueryError{Code: "target_skipped", Message: message})
 	}
 	requests, scanned, visitedRows := 0, 0, 0
+	filterErrorsOmitted := 0
+	filterErrorCount := 0
 	truncated := false
 	for result := range results {
 		requests += result.page.Requests
@@ -273,7 +277,12 @@ func (e *Engine) Query(ctx context.Context, query dsl.Query, pageSize int) (mode
 			if query.Filter != nil {
 				ok, err := query.Filter.Eval(row)
 				if err != nil {
-					errorsOut = append(errorsOut, model.QueryError{Provider: result.target.Provider, Profile: result.target.Profile, Scope: result.target.Scope, Region: result.target.Region, Code: "filter_error", Message: sanitizeError(err.Error())})
+					if filterErrorCount < maxFilterErrors {
+						errorsOut = append(errorsOut, model.QueryError{Provider: result.target.Provider, Profile: result.target.Profile, Scope: result.target.Scope, Region: result.target.Region, Code: "filter_error", Message: sanitizeError(err.Error())})
+						filterErrorCount++
+					} else {
+						filterErrorsOmitted++
+					}
 					continue
 				}
 				if !ok {
@@ -285,6 +294,9 @@ func (e *Engine) Query(ctx context.Context, query dsl.Query, pageSize int) (mode
 			}
 			rows = append(rows, row)
 		}
+	}
+	if filterErrorsOmitted > 0 {
+		errorsOut = append(errorsOut, model.QueryError{Code: "filter_errors_truncated", Message: fmt.Sprintf("%d additional filter errors omitted after the %d-error limit", filterErrorsOmitted, maxFilterErrors)})
 	}
 	if len(query.Aggregates) > 0 {
 		rows = aggregateRows(rows, query.Aggregates, query.GroupBy)
@@ -365,7 +377,11 @@ func (e *Engine) NativeReadWithID(ctx context.Context, correlationID, profile st
 		correlationID = newID()
 	}
 	page, requests, err := readPageWithRetry(ctx, min(3, e.limits.MaxProviderRequests), func() (provider.Page, error) {
-		return adapter.NativeRead(ctx, request)
+		page, err := adapter.NativeRead(ctx, request)
+		if err == nil && request.PageToken != "" && page.NextToken == request.PageToken {
+			return page, &provider.Error{Code: "invalid_provider_response", Operation: request.Operation, Message: "provider returned a repeated pagination cursor"}
+		}
+		return page, err
 	}, func(attempt int, page provider.Page, err error, started time.Time) {
 		e.recordAudit(ctx, AuditEvent{CorrelationID: correlationID, Provider: adapter.Provider(), Profile: profile, Source: sourceForOperation(adapter, request.Operation), Operation: request.Operation, Scope: scopeForNative(request.Params), Region: request.Region, Attempt: attempt}, page, err, started)
 	})

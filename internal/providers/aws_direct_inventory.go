@@ -71,6 +71,12 @@ func (a *awsAdapter) readDirectInventory(ctx context.Context, req provider.Nativ
 	if op.Service == "eks" {
 		min, max = 1, 100
 	}
+	if op.Service == "elasticache" {
+		min, max = 1, 100
+	}
+	if op.Service == "ecs" {
+		min, max = 1, 100
+	}
 	if op.Service == "elb" || op.Service == "elbv2" {
 		min, max = 1, 400
 	}

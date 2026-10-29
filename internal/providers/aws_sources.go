@@ -147,8 +147,9 @@ func (a *awsAdapter) queryCosts(ctx context.Context, req provider.QueryRequest) 
 	}
 	serviceKey, accountKey := "SERVICE", "LINKED_ACCOUNT"
 	granularity := awsCostGranularity(start, end)
+	startDate, endDate := awsCostExplorerDateBounds(start, end)
 	input := &costexplorer.GetCostAndUsageInput{
-		TimePeriod:  &costtypes.DateInterval{Start: awsbase.String(start.Format("2006-01-02")), End: awsbase.String(end.Format("2006-01-02"))},
+		TimePeriod:  &costtypes.DateInterval{Start: awsbase.String(startDate), End: awsbase.String(endDate)},
 		Granularity: granularity,
 		Metrics:     []string{"UnblendedCost"},
 		GroupBy:     []costtypes.GroupDefinition{{Type: costtypes.GroupDefinitionTypeDimension, Key: &serviceKey}, {Type: costtypes.GroupDefinitionTypeDimension, Key: &accountKey}},
@@ -198,6 +199,17 @@ func (a *awsAdapter) queryCosts(ctx context.Context, req provider.QueryRequest) 
 		next = *output.NextPageToken
 	}
 	return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}, nil
+}
+
+func awsCostExplorerDateBounds(start, end time.Time) (string, string) {
+	start = start.UTC()
+	end = end.UTC()
+	startDay := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
+	endDay := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, time.UTC)
+	if end.After(endDay) {
+		endDay = endDay.AddDate(0, 0, 1)
+	}
+	return startDay.Format("2006-01-02"), endDay.Format("2006-01-02")
 }
 
 // awsCostGranularity makes monthly billing explicit rather than silently

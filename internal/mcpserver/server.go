@@ -284,7 +284,7 @@ func (s *Server) RunHTTP(ctx context.Context) error {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
-	mux.HandleFunc("/readyz", s.readyz)
+	mux.Handle("/readyz", bearer(token, hostGuard(s.cfg, protection.Handler(http.HandlerFunc(s.readyz)))))
 	httpServer := &http.Server{Addr: s.cfg.Server.Listen, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 130 * time.Second, WriteTimeout: 130 * time.Second, IdleTimeout: 60 * time.Second}
 	done := make(chan error, 1)
 	go func() {

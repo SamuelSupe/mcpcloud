@@ -233,19 +233,23 @@ func (a *tencentAdapter) queryCosts(ctx context.Context, req provider.QueryReque
 		return provider.Page{}, &provider.Error{Code: "invalid_cursor", Operation: tencentCostsOperation, Message: err.Error()}
 	}
 	page := max(1, cursor.Page)
+	if req.PageToken != "" && (cursor.Page < 1 || cursor.Total <= 0 || cursor.Offset < 0) {
+		return provider.Page{}, &provider.Error{Code: "invalid_cursor", Operation: tencentCostsOperation, Message: "invalid billing page cursor"}
+	}
 	limit := req.Limit
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
+	const providerPageSize = 100
 	client, err := a.tencentClient("billing.tencentcloudapi.com", "", tencentCostsOperation)
 	if err != nil {
 		return provider.Page{}, err
 	}
 	params := map[string]any{
-		"BeginTime": start.Format("2006-01-02 15:04:05"),
-		"EndTime":   end.Add(-time.Second).Format("2006-01-02 15:04:05"),
+		"BeginTime": tencentBillingTime(start),
+		"EndTime":   tencentBillingTime(end.Add(-time.Second)),
 		"BillType":  "1", "PeriodType": "day", "Dimensions": "business", "FeeType": "cost",
-		"PageSize": limit, "PageNo": page,
+		"PageSize": providerPageSize, "PageNo": page,
 	}
 	request := tchttp.NewCommonRequest("billing", "2018-07-09", "DescribeCostExplorerSummary")
 	request.SetContext(ctx)
@@ -278,7 +282,10 @@ func (a *tencentAdapter) queryCosts(ctx context.Context, req provider.QueryReque
 	if payload.Response.Error != nil {
 		return provider.Page{}, &provider.Error{Code: payload.Response.Error.Code, Operation: tencentCostsOperation, Message: payload.Response.Error.Message, Retryable: containsAny(strings.ToLower(payload.Response.Error.Code), "requestlimit", "internalerror")}
 	}
-	rows := make([]map[string]any, 0)
+	if payload.Response.Total < 0 || cursor.Total > 0 && cursor.Total != payload.Response.Total || page*providerPageSize < payload.Response.Total && len(payload.Response.Detail) != providerPageSize {
+		return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: tencentCostsOperation, Message: "Unexpected billing pagination metadata"}
+	}
+	flatRows := make([]map[string]any, 0)
 	for _, detail := range payload.Response.Detail {
 		for _, point := range detail.TimeDetail {
 			amount, err := parseAmount(point.Money)
@@ -294,14 +301,21 @@ func (a *tencentAdapter) queryCosts(ctx context.Context, req provider.QueryReque
 			native := row["native"].(map[string]any)
 			native["dimension"] = "business"
 			native["fee_type"] = "cost"
-			rows = append(rows, row)
+			flatRows = append(flatRows, row)
 		}
 	}
-	next := ""
-	if page*limit < payload.Response.Total {
-		next = encodePeriodCursor(periodCursor{Page: page + 1})
+	if cursor.Offset >= len(flatRows) && cursor.Offset != 0 {
+		return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: tencentCostsOperation, Message: "Billing cursor offset is outside the provider page"}
 	}
-	return provider.Page{Rows: rows, NextToken: next, Scanned: len(payload.Response.Detail), Requests: 1}, nil
+	endOffset := min(cursor.Offset+limit, len(flatRows))
+	rows := flatRows[cursor.Offset:endOffset]
+	next := ""
+	if endOffset < len(flatRows) {
+		next = encodePeriodCursor(periodCursor{Page: page, Offset: endOffset, Total: payload.Response.Total})
+	} else if page*providerPageSize < payload.Response.Total {
+		next = encodePeriodCursor(periodCursor{Page: page + 1, Total: payload.Response.Total})
+	}
+	return provider.Page{Rows: rows, NextToken: next, Scanned: len(rows), Requests: 1}, nil
 }
 
 func (a *tencentAdapter) tencentClient(endpoint, region, operation string) (*tencent.Client, error) {

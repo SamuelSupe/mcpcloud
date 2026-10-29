@@ -22,7 +22,7 @@ func (a *alibabaAdapter) queryCosts(ctx context.Context, req provider.QueryReque
 	if err != nil {
 		return provider.Page{}, err
 	}
-	day, page, err := alibabaDailyPosition(start, end, req.PageToken)
+	day, cursor, err := alibabaDailyPosition(start, end, req.PageToken)
 	if err != nil {
 		return provider.Page{}, err
 	}
@@ -46,12 +46,13 @@ func (a *alibabaAdapter) queryCosts(ctx context.Context, req provider.QueryReque
 		}
 		r.BillOwnerId = requests.Integer(strconv.FormatInt(n, 10))
 	}
+	const providerPageSize = 300
 	limit := req.Limit
-	if limit <= 0 || limit > 300 {
-		limit = 300
+	if limit <= 0 || limit > providerPageSize {
+		limit = providerPageSize
 	}
-	r.PageSize = requests.NewInteger(limit)
-	r.PageNum = requests.NewInteger(page)
+	r.PageSize = requests.NewInteger(providerPageSize)
+	r.PageNum = requests.NewInteger(cursor.Page)
 	setAlibabaTimeout(ctx, r.RpcRequest)
 	c, err := a.bssClient()
 	if err != nil {
@@ -67,29 +68,30 @@ func (a *alibabaAdapter) queryCosts(ctx context.Context, req provider.QueryReque
 	if !response.Success {
 		return provider.Page{}, &provider.Error{Code: response.Code, Operation: alibabaCostsOperation, Message: response.Message}
 	}
-	return a.alibabaDailyPage(response, accounts, day, end, page, limit)
+	return a.alibabaDailyPage(response, accounts, day, end, cursor, limit)
 }
-func alibabaDailyPosition(start, end time.Time, token string) (time.Time, int, error) {
+func alibabaDailyPosition(start, end time.Time, token string) (time.Time, periodCursor, error) {
 	day := time.Date(start.UTC().Year(), start.UTC().Month(), start.UTC().Day(), 0, 0, 0, 0, time.UTC)
 	if day.Before(start) {
 		day = day.AddDate(0, 0, 1)
 	}
 	cursor, err := decodePeriodCursor(token)
 	if err != nil {
-		return time.Time{}, 0, &provider.Error{Code: "invalid_cursor", Operation: alibabaCostsOperation, Message: err.Error()}
+		return time.Time{}, periodCursor{}, &provider.Error{Code: "invalid_cursor", Operation: alibabaCostsOperation, Message: err.Error()}
 	}
-	page := 1
+	if token == "" {
+		cursor = periodCursor{Page: 1}
+	}
 	if token != "" {
-		d, e := time.Parse("2006-01-02", cursor.Period)
-		if e != nil || d.Before(day) || !d.Before(end) || cursor.Page < 1 || cursor.Offset != 0 {
-			return time.Time{}, 0, &provider.Error{Code: "invalid_cursor", Operation: alibabaCostsOperation, Message: "Daily billing cursor is outside the requested dates"}
+		parsedDay, e := time.Parse("2006-01-02", cursor.Period)
+		if e != nil || parsedDay.Before(day) || !parsedDay.Before(end) || cursor.Page < 1 || (cursor.Page > 1 || cursor.Offset > 0) && cursor.Total == 0 {
+			return time.Time{}, periodCursor{}, &provider.Error{Code: "invalid_cursor", Operation: alibabaCostsOperation, Message: "Daily billing cursor is outside the requested dates"}
 		}
-		day = d
-		page = cursor.Page
+		day = parsedDay
 	}
-	return day, page, nil
+	return day, cursor, nil
 }
-func (a *alibabaAdapter) alibabaDailyPage(response *bssopenapi.QueryInstanceBillResponse, accounts []string, day, end time.Time, page, limit int) (provider.Page, error) {
+func (a *alibabaAdapter) alibabaDailyPage(response *bssopenapi.QueryInstanceBillResponse, accounts []string, day, end time.Time, cursor periodCursor, limit int) (provider.Page, error) {
 	bad := func(msg string) (provider.Page, error) {
 		return provider.Page{}, &provider.Error{Code: "invalid_provider_response", Operation: alibabaCostsOperation, Message: msg}
 	}
@@ -97,14 +99,21 @@ func (a *alibabaAdapter) alibabaDailyPage(response *bssopenapi.QueryInstanceBill
 	if data.TotalCount > 50000 {
 		return bad("Daily bill exceeds QueryInstanceBill's 50000-row limit")
 	}
-	if data.PageNum != page || data.PageSize != limit || data.TotalCount < 0 {
+	const providerPageSize = 300
+	page := cursor.Page
+	if page < 1 || data.PageNum != page || data.PageSize != providerPageSize || data.TotalCount < 0 || cursor.Total > 0 && cursor.Total != data.TotalCount || page*providerPageSize < data.TotalCount && len(data.Items.Item) != providerPageSize {
 		return bad("Unexpected billing pagination metadata")
 	}
-	if len(data.Items.Item) == 0 && (page-1)*limit < data.TotalCount {
+	if len(data.Items.Item) == 0 && (page-1)*providerPageSize+cursor.Offset < data.TotalCount {
 		return bad("Empty billing page before total count")
 	}
-	rows := make([]map[string]any, 0, len(data.Items.Item))
-	for i, item := range data.Items.Item {
+	if cursor.Offset >= len(data.Items.Item) && cursor.Offset != 0 {
+		return bad("Daily billing cursor offset is outside the provider page")
+	}
+	endOffset := min(cursor.Offset+limit, len(data.Items.Item))
+	rows := make([]map[string]any, 0, endOffset-cursor.Offset)
+	for i := cursor.Offset; i < endOffset; i++ {
+		item := data.Items.Item[i]
 		if item.BillingDate != day.Format("2006-01-02") {
 			return bad("Missing or mismatched daily billing date")
 		}
@@ -140,12 +149,14 @@ func (a *alibabaAdapter) alibabaDailyPage(response *bssopenapi.QueryInstanceBill
 		rows = append(rows, row)
 	}
 	next := ""
-	if page*limit < data.TotalCount {
-		next = encodePeriodCursor(periodCursor{Period: day.Format("2006-01-02"), Page: page + 1})
+	if endOffset < len(data.Items.Item) {
+		next = encodePeriodCursor(periodCursor{Period: day.Format("2006-01-02"), Page: page, Offset: endOffset, Total: data.TotalCount})
+	} else if page*providerPageSize < data.TotalCount {
+		next = encodePeriodCursor(periodCursor{Period: day.Format("2006-01-02"), Page: page + 1, Total: data.TotalCount})
 	} else if tomorrow := day.AddDate(0, 0, 1); tomorrow.Before(end) {
 		next = encodePeriodCursor(periodCursor{Period: tomorrow.Format("2006-01-02"), Page: 1})
 	}
-	return provider.Page{Rows: rows, NextToken: next, Scanned: len(data.Items.Item), Requests: 1}, nil
+	return provider.Page{Rows: rows, NextToken: next, Scanned: endOffset - cursor.Offset, Requests: 1}, nil
 }
 func alibabaBillingRegion(region string) string {
 	aliases := map[string]string{"华东1（杭州）": "cn-hangzhou", "华东2（上海）": "cn-shanghai", "华北2（北京）": "cn-beijing", "华北3（张家口）": "cn-zhangjiakou", "华南1（深圳）": "cn-shenzhen", "中国香港": "cn-hongkong", "新加坡": "ap-southeast-1", "德国（法兰克福）": "eu-central-1", "美国（硅谷）": "us-west-1", "美国（弗吉尼亚）": "us-east-1", "日本（东京）": "ap-northeast-1", "印度尼西亚（雅加达）": "ap-southeast-5", "英国（伦敦）": "eu-west-1"}

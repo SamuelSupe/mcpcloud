@@ -12,6 +12,7 @@ import (
 	"mcpcloud/internal/model"
 	"mcpcloud/internal/provider"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -108,8 +109,13 @@ func (a *huaweiAdapter) fetchHuaweiOBSBuckets(ctx context.Context, operation, ki
 		return nil, &provider.Error{Code: "missing_credentials", Operation: operation, Message: "Huawei Cloud credential environment variables are not set"}
 	}
 	date := time.Now().UTC().Format(http.TimeFormat)
+	securityToken := envValue(a.profile, "HUAWEICLOUD_SDK_SECURITY_TOKEN", "HUAWEICLOUD_SDK_SECURITY_TOKEN")
+	canonicalHeaders := "x-obs-bucket-type:" + kind + "\n"
+	if securityToken != "" {
+		canonicalHeaders += "x-obs-security-token:" + securityToken + "\n"
+	}
 	mac := hmac.New(sha1.New, []byte(sk))
-	_, _ = mac.Write([]byte(fmt.Sprintf("GET\n\n\n%s\nx-obs-bucket-type:%s\n/", date, kind)))
+	_, _ = mac.Write([]byte("GET\n\n\n" + date + "\n" + canonicalHeaders + "/"))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, huaweiOBSEndpoint, nil)
 	if err != nil {
 		return nil, err
@@ -117,6 +123,9 @@ func (a *huaweiAdapter) fetchHuaweiOBSBuckets(ctx context.Context, operation, ki
 	req.Header.Set("Date", date)
 	req.Header.Set("Authorization", "OBS "+ak+":"+base64.StdEncoding.EncodeToString(mac.Sum(nil)))
 	req.Header.Set("x-obs-bucket-type", kind)
+	if securityToken != "" {
+		req.Header.Set("x-obs-security-token", securityToken)
+	}
 	resp, err := huaweiOBSHTTPClient(ctx).Do(req)
 	if err != nil {
 		return nil, huaweiDeepError(operation, err)
@@ -139,8 +148,8 @@ func (a *huaweiAdapter) fetchHuaweiOBSBuckets(ctx context.Context, operation, ki
 func (a *huaweiAdapter) huaweiOBSBucketRows(buckets []huaweiOBSBucket, kind string) []map[string]any {
 	rows := []map[string]any{}
 	// OBS bucket/PFS enumeration is account-level. Associate it with the
-	// configured project solely for profile authorization; account_scoped marks
-	// that this is not a claim that the bucket belongs to that project.
+	// configured scope for profile authorization; the region still comes from
+	// each bucket's provider-reported location.
 	scopeID := ""
 	if len(a.profile.Scopes.Projects) > 0 {
 		scopeID = a.profile.Scopes.Projects[0]
@@ -154,7 +163,7 @@ func (a *huaweiAdapter) huaweiOBSBucketRows(buckets []huaweiOBSBucket, kind stri
 		}
 		// The request header is the authoritative type filter. Older OBS XML
 		// responses omit BucketType, and some responses use a non-enum label.
-		if b.Name == "" {
+		if b.Name == "" || len(a.profile.Regions) > 0 && !slices.Contains(a.profile.Regions, "*") && b.Location == "" {
 			continue
 		}
 		k := "bucket"
@@ -162,7 +171,6 @@ func (a *huaweiAdapter) huaweiOBSBucketRows(buckets []huaweiOBSBucket, kind stri
 			k = "parallel_file_system"
 		}
 		row := newDeepDetailRow(a.Provider(), a.name, b.Name, b.Name, "obs", "OBS::Bucket", "storage", k, b.Location, scopeID)
-		row["account_scoped"] = true
 		at := row["attributes"].(map[string]any)
 		at["bucket_type"] = bt
 		at["creation_date"] = b.CreationDate
@@ -212,7 +220,11 @@ func (a *huaweiAdapter) getHuaweiOBSStorageInfo(ctx context.Context, r provider.
 	if !found || bucket.Location == "" {
 		return provider.Page{}, &provider.Error{Code: "not_found", Operation: r.Operation, Message: "OBS bucket was not found in the authorized account inventory"}
 	}
-	storage, err := a.fetchHuaweiOBSStorageInfo(ctx, r.Operation, bucket.Name, bucket.Location)
+	region, err := verifyDetailRegion(bucket.Location, r.Region, a.profile.Regions, r.Operation)
+	if err != nil {
+		return provider.Page{}, err
+	}
+	storage, err := a.fetchHuaweiOBSStorageInfo(ctx, r.Operation, bucket.Name, region)
 	if err != nil {
 		return provider.Page{}, err
 	}
@@ -226,8 +238,7 @@ func (a *huaweiAdapter) getHuaweiOBSStorageInfo(ctx context.Context, r provider.
 	if strings.EqualFold(bucket.BucketType, "POSIX") {
 		kind = "parallel_file_system_storage"
 	}
-	row := newDeepDetailRow(a.Provider(), a.name, bucket.Name, bucket.Name, "obs", "OBS::BucketStorageInfo", "storage", kind, bucket.Location, scopeID)
-	row["account_scoped"] = true
+	row := newDeepDetailRow(a.Provider(), a.name, bucket.Name, bucket.Name, "obs", "OBS::BucketStorageInfo", "storage", kind, region, scopeID)
 	attrs := row["attributes"].(map[string]any)
 	attrs["bucket_type"] = strings.ToUpper(bucket.BucketType)
 	attrs["size_bytes"] = storage.Size
@@ -249,8 +260,13 @@ func (a *huaweiAdapter) fetchHuaweiOBSStorageInfo(ctx context.Context, operation
 	}
 	date := time.Now().UTC().Format(http.TimeFormat)
 	canonicalResource := "/" + bucketName + "/?storageinfo"
+	securityToken := envValue(a.profile, "HUAWEICLOUD_SDK_SECURITY_TOKEN", "HUAWEICLOUD_SDK_SECURITY_TOKEN")
+	canonicalHeaders := ""
+	if securityToken != "" {
+		canonicalHeaders = "x-obs-security-token:" + securityToken + "\n"
+	}
 	mac := hmac.New(sha1.New, []byte(sk))
-	_, _ = mac.Write([]byte("GET\n\n\n" + date + "\n" + canonicalResource))
+	_, _ = mac.Write([]byte("GET\n\n\n" + date + "\n" + canonicalHeaders + canonicalResource))
 	endpoint := "https://" + bucketName + ".obs." + region + ".myhuaweicloud.com/?storageinfo"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -258,6 +274,9 @@ func (a *huaweiAdapter) fetchHuaweiOBSStorageInfo(ctx context.Context, operation
 	}
 	req.Header.Set("Date", date)
 	req.Header.Set("Authorization", "OBS "+ak+":"+base64.StdEncoding.EncodeToString(mac.Sum(nil)))
+	if securityToken != "" {
+		req.Header.Set("x-obs-security-token", securityToken)
+	}
 	response, err := huaweiOBSHTTPClient(ctx).Do(req)
 	if err != nil {
 		return huaweiOBSStorageInfo{}, huaweiDeepError(operation, err)
@@ -314,5 +333,5 @@ func huaweiOBSHTTPClient(ctx context.Context) *http.Client {
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) > 0 {
 		timeout = time.Until(deadline)
 	}
-	return &http.Client{Timeout: timeout}
+	return &http.Client{Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
